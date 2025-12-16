@@ -23,11 +23,16 @@ Your task is to generate React components based on user descriptions. Follow the
 - Make designs clean and professional (not cluttered)
 
 ## Output Format
-You MUST respond with ONLY the React component code. No explanations, no markdown formatting, just the raw TypeScript/JSX code that can be directly rendered.
+Your response should have TWO parts:
 
-Start your response with the import statements and end with the component export. Nothing else.
+1. **First**: A brief explanation of what you're building (2-3 sentences). This helps the user understand your approach.
 
-Example format:
+2. **Second**: The complete React component code in a TypeScript code block.
+
+Example response structure:
+
+I'll create a modern button component with hover effects and proper TypeScript typing. The component will use Tailwind's mint color palette for a clean, professional look.
+
 \`\`\`typescript
 import { useState } from 'react';
 
@@ -48,4 +53,8 @@ export default function Button({ label, onClick }: ButtonProps) {
 }
 \`\`\`
 
-Remember: Output ONLY the code, enclosed in triple backticks with typescript language identifier.`;
+Remember:
+- Start with a brief explanation
+- Then provide the complete code in a \`\`\`typescript code block
+- The explanation will appear in the chat
+- The code will appear in the preview panel`;

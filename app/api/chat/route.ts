@@ -143,18 +143,43 @@ export async function POST(req: NextRequest): Promise<Response> {
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
+          let inCodeBlock = false;
+          let codeBuffer = '';
+          let explanationBuffer = '';
+
           for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || '';
             if (content) {
               fullResponse += content;
 
-              // Send chunk to client
-              const data = JSON.stringify({
-                type: 'chunk',
-                content,
-                chatId: currentChatId,
-              });
-              controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+              // Check if we're entering or leaving a code block
+              if (content.includes('```')) {
+                inCodeBlock = !inCodeBlock;
+              }
+
+              if (inCodeBlock) {
+                // Accumulate code
+                codeBuffer += content;
+
+                // Send code chunk
+                const codeData = JSON.stringify({
+                  type: 'code-chunk',
+                  content,
+                  chatId: currentChatId,
+                });
+                controller.enqueue(encoder.encode(`data: ${codeData}\n\n`));
+              } else {
+                // Accumulate explanation
+                explanationBuffer += content;
+
+                // Send explanation chunk to chat
+                const explanationData = JSON.stringify({
+                  type: 'explanation-chunk',
+                  content,
+                  chatId: currentChatId,
+                });
+                controller.enqueue(encoder.encode(`data: ${explanationData}\n\n`));
+              }
             }
           }
 
@@ -173,7 +198,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             type: 'done',
             chatId: currentChatId,
             code,
-            message: fullResponse,
+            explanation: explanationBuffer,
           });
           controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
           controller.close();

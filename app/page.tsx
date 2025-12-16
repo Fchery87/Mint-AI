@@ -57,7 +57,8 @@ export default function Home() {
       // Handle streaming response
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let streamedContent = "";
+      let streamedExplanation = "";
+      let streamedCode = "";
 
       if (!reader) {
         throw new Error("No response body");
@@ -75,17 +76,22 @@ export default function Home() {
             try {
               const data = JSON.parse(line.slice(6));
 
-              if (data.type === "chunk") {
-                // Update streaming content
-                streamedContent += data.content;
+              if (data.type === "explanation-chunk") {
+                // Update chat message with explanation
+                streamedExplanation += data.content;
                 setMessages((prev) => {
                   const updated = [...prev];
                   updated[assistantIndex] = {
                     role: "assistant",
-                    content: streamedContent,
+                    content: streamedExplanation,
                   };
                   return updated;
                 });
+              } else if (data.type === "code-chunk") {
+                // Update code preview (accumulate but don't show until complete)
+                streamedCode += data.content;
+                // Optionally show partial code
+                setComponentCode(streamedCode);
               } else if (data.type === "done") {
                 // Final response with extracted code
                 if (!chatId) {
