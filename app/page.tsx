@@ -1,0 +1,180 @@
+"use client";
+
+import { useState, useRef, useEffect } from "react";
+import { toast } from "sonner";
+import { motion } from "framer-motion";
+import ChatPanel from "@/components/ChatPanel";
+import PreviewPanel from "@/components/PreviewPanel";
+import { ChatRequest } from "./api/chat/route";
+import { Terminal } from "lucide-react";
+import { Logo } from "@/components/ui/logo";
+import { ModeToggle } from "@/components/mode-toggle";
+
+export default function Home() {
+  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [chatId, setChatId] = useState<string | undefined>();
+  const [componentCode, setComponentCode] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const handleSendMessage = async (message: string) => {
+    if (!message.trim()) return;
+
+    // Add user message to chat
+    const userMessage = { role: "user", content: message };
+    setMessages((prev) => [...prev, userMessage]);
+    setIsLoading(true);
+
+    // Add placeholder for assistant message (will be updated as stream arrives)
+    const assistantIndex = messages.length + 1;
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+
+    try {
+      const chatRequest: ChatRequest = {
+        message,
+        chatId,
+      };
+
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(chatRequest),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to generate component");
+      }
+
+      // Handle streaming response
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+      let streamedContent = "";
+
+      if (!reader) {
+        throw new Error("No response body");
+      }
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value);
+        const lines = chunk.split("\n");
+
+        for (const line of lines) {
+          if (line.startsWith("data: ")) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === "chunk") {
+                // Update streaming content
+                streamedContent += data.content;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[assistantIndex] = {
+                    role: "assistant",
+                    content: streamedContent,
+                  };
+                  return updated;
+                });
+              } else if (data.type === "done") {
+                // Final response with extracted code
+                if (!chatId) {
+                  setChatId(data.chatId);
+                }
+                setComponentCode(data.code);
+                toast.success("Component generated!");
+              } else if (data.type === "error") {
+                throw new Error(data.error);
+              }
+            } catch (e) {
+              // Skip invalid JSON lines
+              console.warn("Failed to parse SSE data:", e);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Failed to generate component";
+      toast.error(errorMessage);
+      console.error("Error:", error);
+
+      // Remove the placeholder message on error
+      setMessages((prev) => prev.slice(0, -1));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  return (
+    <main className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
+      {/* Header */}
+      <motion.header 
+        initial={{ y: -20, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        className="h-16 px-6 flex items-center justify-between border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60"
+      >
+        <div className="flex items-center gap-3">
+          <Logo />
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-muted/50 rounded-full text-xs font-medium text-muted-foreground">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            System Online
+          </div>
+          <ModeToggle />
+        </div>
+      </motion.header>
+
+      {/* Main Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Chat Section */}
+        <motion.div 
+          initial={{ x: -20, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ delay: 0.1 }}
+          className="w-[400px] border-r border-border/40 flex flex-col bg-card/30"
+        >
+          <ChatPanel
+            messages={messages}
+            isLoading={isLoading}
+            onSendMessage={handleSendMessage}
+            messagesEndRef={messagesEndRef}
+          />
+        </motion.div>
+
+        {/* Preview Section */}
+        <motion.div 
+          initial={{ opacity: 0, scale: 0.98 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ delay: 0.2 }}
+          className="flex-1 flex flex-col bg-muted/30 p-4"
+        >
+          <div className="flex-1 rounded-xl border border-border/40 bg-background shadow-sm overflow-hidden relative">
+            {!componentCode && !isLoading && messages.length === 0 ? (
+               <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40 pointer-events-none">
+                 <div className="text-center space-y-4">
+                   <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+                     <Terminal size={32} />
+                   </div>
+                   <p className="text-lg font-medium">Ready to build</p>
+                 </div>
+               </div>
+            ) : null}
+            <PreviewPanel componentCode={componentCode} />
+          </div>
+        </motion.div>
+      </div>
+    </main>
+  );
+}

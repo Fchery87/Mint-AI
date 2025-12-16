@@ -1,0 +1,58 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "description": "Block dangerous bash commands",
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -qE '(rm -rf|git push --force|-f|force-push)'; then echo 'SECURITY: Dangerous command blocked. Confirm explicitly if needed.' && exit 2; fi"
+          }
+        ]
+      },
+      {
+        "description": "Warn before .env.local edits",
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_FILE_PATHS\" | grep -q '\\.env\\.local'; then echo 'WARNING: Editing .env.local. Ensure sensitive values are not exposed.' && exit 0; fi"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "description": "Auto-format TypeScript files after edit",
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_FILE_PATHS\" | grep -qE '\\.(ts|tsx)$'; then bun run dev > /dev/null 2>&1 & echo 'Dev server started in background'; fi"
+          }
+        ]
+      },
+      {
+        "description": "Type-check component changes",
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_FILE_PATHS\" | grep -qE 'components/.+\\.tsx$'; then echo 'Running type check on components...'; bun typecheck components 2>&1 || true; fi"
+          }
+        ]
+      },
+      {
+        "description": "Type-check API changes",
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo \"$CLAUDE_FILE_PATHS\" | grep -qE 'app/api/.+\\.ts$'; then echo 'Running type check on API...'; bun typecheck app/api 2>&1 || true; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
