@@ -7,6 +7,7 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useTheme } from "next-themes";
+import LivePreview from "./LivePreview";
 
 interface PreviewPanelProps {
   componentCode: string;
@@ -187,22 +188,8 @@ export default function PreviewPanel({ componentCode, isStreaming = false }: Pre
             {/* Placeholder managed by parent usually */}
           </div>
         ) : activeTab === "preview" ? (
-          <div className="w-full h-full overflow-auto p-4 bg-muted/10">
-            <div className="bg-background rounded-xl shadow-sm border border-border/50 min-h-full p-8">
-              <div className="prose max-w-none">
-                {/* This is where the component would be rendered */}
-                <div className="flex flex-col items-center justify-center p-12 border-2 border-dashed border-border/60 rounded-xl text-center">
-                  <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center mb-4 text-muted-foreground">
-                    <Eye size={24} />
-                  </div>
-                  <h3 className="font-medium text-foreground mb-1">Live Preview</h3>
-                  <p className="text-sm text-muted-foreground max-w-xs">
-                    This is where your generated component will be rendered. 
-                    Switch to the "Code" tab to copy the snippet.
-                  </p>
-                </div>
-              </div>
-            </div>
+          <div className="w-full h-full overflow-auto">
+            <LivePreview code={componentCode} />
           </div>
         ) : (
           <div className="w-full h-full overflow-auto">
