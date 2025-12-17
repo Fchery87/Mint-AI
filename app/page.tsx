@@ -10,11 +10,19 @@ import { Terminal } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { ModeToggle } from "@/components/mode-toggle";
 
+interface ChatMessage {
+  role: string;
+  content: string;
+  reasoning?: string;
+  isReasoningComplete?: boolean;
+}
+
 export default function Home() {
-  const [messages, setMessages] = useState<Array<{ role: string; content: string }>>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [chatId, setChatId] = useState<string | undefined>();
   const [componentCode, setComponentCode] = useState("");
+  const [isReasoningStreaming, setIsReasoningStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -29,13 +37,14 @@ export default function Home() {
     if (!message.trim()) return;
 
     // Add user message to chat
-    const userMessage = { role: "user", content: message };
+    const userMessage: ChatMessage = { role: "user", content: message };
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
+    setIsReasoningStreaming(false);
 
     // Add placeholder for assistant message (will be updated as stream arrives)
     const assistantIndex = messages.length + 1;
-    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
+    setMessages((prev) => [...prev, { role: "assistant", content: "", reasoning: "" }]);
 
     try {
       const chatRequest: ChatRequest = {
@@ -59,6 +68,7 @@ export default function Home() {
       const decoder = new TextDecoder();
       let streamedExplanation = "";
       let streamedCode = "";
+      let streamedReasoning = "";
 
       if (!reader) {
         throw new Error("No response body");
@@ -76,21 +86,44 @@ export default function Home() {
             try {
               const data = JSON.parse(line.slice(6));
 
-              if (data.type === "explanation-chunk") {
+              if (data.type === "reasoning-chunk") {
+                // Update reasoning content
+                streamedReasoning += data.content;
+                setIsReasoningStreaming(true);
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[assistantIndex] = {
+                    ...updated[assistantIndex],
+                    reasoning: streamedReasoning,
+                    isReasoningComplete: false,
+                  };
+                  return updated;
+                });
+              } else if (data.type === "reasoning-complete") {
+                // Mark reasoning as complete
+                setIsReasoningStreaming(false);
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  updated[assistantIndex] = {
+                    ...updated[assistantIndex],
+                    isReasoningComplete: true,
+                  };
+                  return updated;
+                });
+              } else if (data.type === "explanation-chunk") {
                 // Update chat message with explanation
                 streamedExplanation += data.content;
                 setMessages((prev) => {
                   const updated = [...prev];
                   updated[assistantIndex] = {
-                    role: "assistant",
+                    ...updated[assistantIndex],
                     content: streamedExplanation,
                   };
                   return updated;
                 });
               } else if (data.type === "code-chunk") {
-                // Update code preview (accumulate but don't show until complete)
+                // Update code preview
                 streamedCode += data.content;
-                // Optionally show partial code
                 setComponentCode(streamedCode);
               } else if (data.type === "done") {
                 // Final response with extracted code
@@ -119,6 +152,7 @@ export default function Home() {
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
+      setIsReasoningStreaming(false);
     }
   };
 

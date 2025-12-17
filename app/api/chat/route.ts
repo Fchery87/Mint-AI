@@ -143,44 +143,152 @@ export async function POST(req: NextRequest): Promise<Response> {
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
+          let buffer = '';
+          let inReasoning = false;
           let inCodeBlock = false;
-          let codeBuffer = '';
+          let reasoningBuffer = '';
           let explanationBuffer = '';
 
           for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || '';
             if (content) {
               fullResponse += content;
+              buffer += content;
 
-              // Check if we're entering or leaving a code block
-              if (content.includes('```')) {
-                inCodeBlock = !inCodeBlock;
-              }
+              // Process buffer for tags and content
+              while (buffer.length > 0) {
+                // Check for reasoning start tag
+                if (!inReasoning && buffer.includes('<reasoning>')) {
+                  const idx = buffer.indexOf('<reasoning>');
+                  const before = buffer.substring(0, idx);
 
-              if (inCodeBlock) {
-                // Accumulate code
-                codeBuffer += content;
+                  // Send any text before reasoning tag as explanation
+                  if (before.trim()) {
+                    explanationBuffer += before;
+                    const data = JSON.stringify({
+                      type: 'explanation-chunk',
+                      content: before,
+                      chatId: currentChatId,
+                    });
+                    controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                  }
 
-                // Send code chunk
-                const codeData = JSON.stringify({
-                  type: 'code-chunk',
-                  content,
-                  chatId: currentChatId,
-                });
-                controller.enqueue(encoder.encode(`data: ${codeData}\n\n`));
-              } else {
-                // Accumulate explanation
-                explanationBuffer += content;
+                  buffer = buffer.substring(idx + 11); // Remove <reasoning>
+                  inReasoning = true;
+                  continue;
+                }
 
-                // Send explanation chunk to chat
-                const explanationData = JSON.stringify({
-                  type: 'explanation-chunk',
-                  content,
-                  chatId: currentChatId,
-                });
-                controller.enqueue(encoder.encode(`data: ${explanationData}\n\n`));
+                // Check for reasoning end tag
+                if (inReasoning && buffer.includes('</reasoning>')) {
+                  const idx = buffer.indexOf('</reasoning>');
+                  const reasoningContent = buffer.substring(0, idx);
+
+                  reasoningBuffer += reasoningContent;
+                  const data = JSON.stringify({
+                    type: 'reasoning-chunk',
+                    content: reasoningContent,
+                    chatId: currentChatId,
+                  });
+                  controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+
+                  // Send reasoning complete event
+                  const completeData = JSON.stringify({
+                    type: 'reasoning-complete',
+                    chatId: currentChatId,
+                  });
+                  controller.enqueue(
+                    encoder.encode(`data: ${completeData}\n\n`)
+                  );
+
+                  buffer = buffer.substring(idx + 12); // Remove </reasoning>
+                  inReasoning = false;
+                  continue;
+                }
+
+                // If in reasoning, accumulate and stream
+                if (inReasoning) {
+                  // Stream reasoning content in smaller chunks
+                  if (buffer.length > 20 || buffer.includes('\n')) {
+                    reasoningBuffer += buffer;
+                    const data = JSON.stringify({
+                      type: 'reasoning-chunk',
+                      content: buffer,
+                      chatId: currentChatId,
+                    });
+                    controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                    buffer = '';
+                  }
+                  break;
+                }
+
+                // Check for code block
+                if (buffer.includes('```')) {
+                  const idx = buffer.indexOf('```');
+                  const before = buffer.substring(0, idx);
+
+                  if (!inCodeBlock) {
+                    // Starting code block - send any text before as explanation
+                    if (before.trim()) {
+                      explanationBuffer += before;
+                      const data = JSON.stringify({
+                        type: 'explanation-chunk',
+                        content: before,
+                        chatId: currentChatId,
+                      });
+                      controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                    }
+                    buffer = buffer.substring(idx + 3);
+                    inCodeBlock = true;
+                  } else {
+                    // Ending code block - send accumulated code
+                    const codeData = JSON.stringify({
+                      type: 'code-chunk',
+                      content: before,
+                      chatId: currentChatId,
+                    });
+                    controller.enqueue(encoder.encode(`data: ${codeData}\n\n`));
+                    buffer = buffer.substring(idx + 3);
+                    inCodeBlock = false;
+                  }
+                  continue;
+                }
+
+                // Stream code or explanation based on state
+                if (inCodeBlock) {
+                  if (buffer.length > 30 || buffer.includes('\n')) {
+                    const codeData = JSON.stringify({
+                      type: 'code-chunk',
+                      content: buffer,
+                      chatId: currentChatId,
+                    });
+                    controller.enqueue(encoder.encode(`data: ${codeData}\n\n`));
+                    buffer = '';
+                  }
+                } else {
+                  if (buffer.length > 30 || buffer.includes('\n')) {
+                    explanationBuffer += buffer;
+                    const data = JSON.stringify({
+                      type: 'explanation-chunk',
+                      content: buffer,
+                      chatId: currentChatId,
+                    });
+                    controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                    buffer = '';
+                  }
+                }
+                break;
               }
             }
+          }
+
+          // Send any remaining buffer
+          if (buffer.trim()) {
+            const data = JSON.stringify({
+              type: inCodeBlock ? 'code-chunk' : 'explanation-chunk',
+              content: buffer,
+              chatId: currentChatId,
+            });
+            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
           }
 
           // Save complete response to history

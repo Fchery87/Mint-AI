@@ -3,10 +3,13 @@ import { Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { Logo } from "@/components/ui/logo";
+import { ReasoningBlock } from "@/components/ReasoningBlock";
 
 interface Message {
   role: string;
   content: string;
+  reasoning?: string;
+  isReasoningComplete?: boolean;
 }
 
 interface ChatPanelProps {
@@ -56,10 +59,16 @@ export default function ChatPanel({
     }
   };
 
+  // Check if the last message is currently streaming reasoning
+  const lastMessage = messages[messages.length - 1];
+  const isReasoningStreaming = lastMessage?.role === "assistant" && 
+    lastMessage?.reasoning && 
+    !lastMessage?.isReasoningComplete;
+
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center p-4">
             <div className="max-w-sm w-full space-y-8">
@@ -103,23 +112,35 @@ export default function ChatPanel({
                 animate={{ opacity: 1, y: 0 }}
                 key={idx}
                 className={cn(
-                  "flex w-full",
-                  msg.role === "user" ? "justify-end" : "justify-start"
+                  "flex flex-col w-full gap-2",
+                  msg.role === "user" ? "items-end" : "items-start"
                 )}
               >
-                <div
-                  className={cn(
-                    "max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed",
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground rounded-br-sm shadow-md shadow-primary/10"
-                      : "bg-muted text-foreground rounded-bl-sm"
-                  )}
-                >
-                  {msg.content}
-                </div>
+                {/* Reasoning Block (only for assistant messages with reasoning) */}
+                {msg.role === "assistant" && msg.reasoning && (
+                  <ReasoningBlock
+                    content={msg.reasoning}
+                    isStreaming={idx === messages.length - 1 && isReasoningStreaming}
+                    className="w-full max-w-[85%]"
+                  />
+                )}
+                
+                {/* Message Content */}
+                {(msg.content || msg.role === "user") && (
+                  <div
+                    className={cn(
+                      "max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed",
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground rounded-br-sm shadow-md shadow-primary/10"
+                        : "bg-muted text-foreground rounded-bl-sm"
+                    )}
+                  >
+                    {msg.content}
+                  </div>
+                )}
               </motion.div>
             ))}
-            {isLoading && (
+            {isLoading && !messages[messages.length - 1]?.content && !messages[messages.length - 1]?.reasoning && (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
