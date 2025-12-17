@@ -177,7 +177,7 @@ export default function Home() {
                  </div>
                </div>
             ) : null}
-            <PreviewPanel componentCode={componentCode} />
+            <PreviewPanel componentCode={componentCode} isStreaming={isLoading} />
           </div>
         </motion.div>
       </div>

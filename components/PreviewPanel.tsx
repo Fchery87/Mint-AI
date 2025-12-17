@@ -1,17 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Code, Eye, Copy, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface PreviewPanelProps {
   componentCode: string;
+  isStreaming?: boolean;
 }
 
-export default function PreviewPanel({ componentCode }: PreviewPanelProps) {
+export default function PreviewPanel({ componentCode, isStreaming = false }: PreviewPanelProps) {
   const [activeTab, setActiveTab] = useState<"preview" | "code">("preview");
   const [copied, setCopied] = useState(false);
 
+  // Auto-switch to code tab when streaming starts
+  useEffect(() => {
+    if (isStreaming && componentCode) {
+      setActiveTab("code");
+    }
+  }, [isStreaming, componentCode]);
   const handleCopy = async () => {
     if (!componentCode) return;
 
@@ -106,10 +113,9 @@ export default function PreviewPanel({ componentCode }: PreviewPanelProps) {
             </div>
           </div>
         ) : (
-          <div className="w-full h-full overflow-auto bg-[#0d0d0d] p-4 text-sm font-mono leading-relaxed">
-            <pre className="text-muted-foreground whitespace-pre-wrap break-words">
-              <code dangerouslySetInnerHTML={{ __html: componentCode // In a real app we'd use syntax highlighting here
-              }} />
+          <div className="w-full h-full overflow-auto bg-muted/50 p-4 text-sm font-mono leading-relaxed">
+            <pre className="text-foreground whitespace-pre-wrap break-words bg-card/80 rounded-lg p-4 border border-border/50 min-h-full">
+              <code>{componentCode}</code>
             </pre>
           </div>
         )}
