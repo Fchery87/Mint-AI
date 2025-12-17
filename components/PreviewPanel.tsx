@@ -194,15 +194,15 @@ export default function PreviewPanel({ componentCode, isStreaming = false }: Pre
         ) : (
           <div className="w-full h-full overflow-auto">
             {/* Code Editor Style Container */}
-            <div className="min-h-full bg-[#282c34] dark:bg-[#1e1e1e]">
+            <div className="min-h-full bg-[#fafafa] dark:bg-[#282c34]">
               {/* Editor Top Bar (like VS Code) */}
-              <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 bg-[#21252b] dark:bg-[#1e1e1e] border-b border-[#3e4451]/50">
+              <div className="sticky top-0 z-10 flex items-center gap-2 px-4 py-2 bg-[#f3f3f3] dark:bg-[#21252b] border-b border-border/20 dark:border-[#3e4451]/50">
                 <div className="flex items-center gap-1.5">
                   <div className="w-3 h-3 rounded-full bg-[#ff5f56]" />
                   <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
                   <div className="w-3 h-3 rounded-full bg-[#27c93f]" />
                 </div>
-                <span className="ml-3 text-xs text-[#abb2bf]/60 font-mono">
+                <span className="ml-3 text-xs text-muted-foreground/60 font-mono">
                   component.tsx
                 </span>
                 {isStreaming && (
@@ -216,11 +216,11 @@ export default function PreviewPanel({ componentCode, isStreaming = false }: Pre
               {/* Code Content with Line Numbers */}
               <div className="flex">
                 {/* Line Numbers */}
-                <div className="flex-shrink-0 py-4 pl-4 pr-2 text-right select-none border-r border-[#3e4451]/30">
+                <div className="flex-shrink-0 py-4 pl-4 pr-2 text-right select-none border-r border-border/30 dark:border-[#3e4451]/30">
                   {componentCode.split("\n").map((_, idx) => (
                     <div
                       key={idx}
-                      className="text-xs font-mono leading-[1.6] text-[#636d83]"
+                      className="text-xs font-mono leading-[1.6] text-muted-foreground/50 dark:text-[#636d83]"
                       style={{ fontSize: "13px" }}
                     >
                       {idx + 1}
@@ -250,7 +250,7 @@ export default function PreviewPanel({ componentCode, isStreaming = false }: Pre
                       {componentCode}
                     </SyntaxHighlighter>
                   ) : (
-                    <pre className="text-[#abb2bf] font-mono text-sm whitespace-pre">
+                    <pre className="text-foreground font-mono text-sm whitespace-pre">
                       {componentCode}
                     </pre>
                   )}
