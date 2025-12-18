@@ -64,6 +64,36 @@ function generateChatId(): string {
   return `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
+export function splitReasoningAtTerminator(buffer: string): {
+  reasoningContent: string;
+  rest: string;
+  terminated: boolean;
+} {
+  const endTag = '</reasoning>';
+  const endTagIdx = buffer.indexOf(endTag);
+  const fenceIdx = buffer.indexOf('```');
+
+  // If a fenced code block appears before </reasoning>, treat it as an early terminator.
+  // Keep the fence in the remaining buffer so normal code parsing can handle it.
+  if (fenceIdx !== -1 && (endTagIdx === -1 || fenceIdx < endTagIdx)) {
+    return {
+      reasoningContent: buffer.substring(0, fenceIdx),
+      rest: buffer.substring(fenceIdx),
+      terminated: true,
+    };
+  }
+
+  if (endTagIdx !== -1) {
+    return {
+      reasoningContent: buffer.substring(0, endTagIdx),
+      rest: buffer.substring(endTagIdx + endTag.length),
+      terminated: true,
+    };
+  }
+
+  return { reasoningContent: '', rest: buffer, terminated: false };
+}
+
 function extractCodeFromResponse(
   text: string,
   outputFormat: OutputFormat
@@ -221,37 +251,40 @@ export async function POST(req: NextRequest): Promise<Response> {
                   continue;
                 }
 
-                // Check for reasoning end tag
-                if (inReasoning && buffer.includes('</reasoning>')) {
-                  const idx = buffer.indexOf('</reasoning>');
-                  const reasoningContent = buffer.substring(0, idx);
+                // While in reasoning, stop at the first terminator:
+                // - Explicit </reasoning>
+                // - Any fenced code block ``` (models sometimes emit code before closing the tag)
+                if (inReasoning) {
+                  const split = splitReasoningAtTerminator(buffer);
+                  if (split.terminated) {
+                    if (split.reasoningContent) {
+                      reasoningBuffer += split.reasoningContent;
+                      const data = JSON.stringify({
+                        type: 'reasoning-chunk',
+                        content: split.reasoningContent,
+                        chatId: currentChatId,
+                      });
+                      controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                    }
 
-                  reasoningBuffer += reasoningContent;
-                  const data = JSON.stringify({
-                    type: 'reasoning-chunk',
-                    content: reasoningContent,
-                    chatId: currentChatId,
-                  });
-                  controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                    const completeData = JSON.stringify({
+                      type: 'reasoning-complete',
+                      chatId: currentChatId,
+                    });
+                    controller.enqueue(
+                      encoder.encode(`data: ${completeData}\n\n`)
+                    );
 
-                  // Send reasoning complete event
-                  const completeData = JSON.stringify({
-                    type: 'reasoning-complete',
-                    chatId: currentChatId,
-                  });
-                  controller.enqueue(
-                    encoder.encode(`data: ${completeData}\n\n`)
-                  );
-
-                  buffer = buffer.substring(idx + 12); // Remove </reasoning>
-                  inReasoning = false;
-                  continue;
+                    buffer = split.rest;
+                    inReasoning = false;
+                    continue;
+                  }
                 }
 
-                // If in reasoning, accumulate and stream
+                // If in reasoning, accumulate and stream immediately for real-time feel
                 if (inReasoning) {
-                  // Stream reasoning content in smaller chunks
-                  if (buffer.length > 20 || buffer.includes('\n')) {
+                  // Stream reasoning content immediately (smaller chunks = smoother streaming)
+                  if (buffer.length > 5 || buffer.includes('\n')) {
                     reasoningBuffer += buffer;
                     const data = JSON.stringify({
                       type: 'reasoning-chunk',

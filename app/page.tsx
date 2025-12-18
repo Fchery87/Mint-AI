@@ -12,6 +12,8 @@ import { Terminal } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { ModeToggle } from "@/components/mode-toggle";
 import { parseProjectOutput, type ProjectOutput } from "@/lib/project-types";
+import { detectLanguage } from "@/lib/language-detection";
+import { checkCodeQuality, formatQualityReport } from "@/lib/code-quality-check";
 
 interface ChatMessage {
   role: string;
@@ -28,7 +30,7 @@ export default function Home() {
   const [chatId, setChatId] = useState<string | undefined>();
   const [componentCode, setComponentCode] = useState("");
   const [projectOutput, setProjectOutput] = useState<ProjectOutput | null>(null);
-  const [outputFormat, _setOutputFormat] = useState<OutputFormat>("React");
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>("React"); // Track current language (for future UI display)
   const [inputStatus, setInputStatus] = useState<"ready" | "submitting" | "streaming" | "error">("ready");
   const [sessionCost, setSessionCost] = useState<{ cost: string; tokens: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -44,6 +46,10 @@ export default function Home() {
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
 
+    // Detect the intended language/framework from the message
+    const detectedLanguage = detectLanguage(message);
+    setOutputFormat(detectedLanguage);
+
     // Add user message to chat
     const userMessage: ChatMessage = { role: "user", content: message };
     setMessages((prev) => [...prev, userMessage]);
@@ -58,7 +64,7 @@ export default function Home() {
       const chatRequest: ChatRequest = {
         message,
         chatId,
-        outputFormat,
+        outputFormat: detectedLanguage, // Use detected language directly, not state
       };
 
       const response = await fetch("/api/chat", {
@@ -78,6 +84,7 @@ export default function Home() {
       let streamedExplanation = "";
       let streamedCode = "";
       let streamedReasoning = "";
+      let accumulatedCode = ""; // Track full code for incremental parsing
 
       if (!reader) {
         throw new Error("No response body");
@@ -132,7 +139,14 @@ export default function Home() {
               } else if (data.type === "code-chunk") {
                 // Update code preview
                 streamedCode += data.content;
+                accumulatedCode += data.content;
                 setComponentCode(streamedCode);
+
+                // Try to parse incrementally for project mode
+                const parsed = parseProjectOutput(accumulatedCode);
+                if (parsed.type === "project" && parsed.files.length > 0) {
+                  setProjectOutput(parsed);
+                }
               } else if (data.type === "done") {
                 // Final response with extracted code
                 if (!chatId) {
@@ -143,6 +157,17 @@ export default function Home() {
                 // Parse the response to detect project mode
                 const parsed = parseProjectOutput(data.code);
                 setProjectOutput(parsed);
+
+                // Run quality check (development mode only)
+                if (process.env.NODE_ENV === 'development') {
+                  const qualityResult = checkCodeQuality(data.code, detectedLanguage);
+                  console.log('=== Code Quality Check ===');
+                  console.log(formatQualityReport(qualityResult));
+
+                  if (!qualityResult.passed) {
+                    console.warn('⚠️ Code quality issues detected. See report above.');
+                  }
+                }
 
                 // Update session cost if available
                 if (data.usage) {
@@ -198,7 +223,7 @@ export default function Home() {
           )}
           <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-muted/50 rounded-full text-xs font-medium text-muted-foreground">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            System Online
+            {outputFormat}
           </div>
           <ModeToggle />
         </div>

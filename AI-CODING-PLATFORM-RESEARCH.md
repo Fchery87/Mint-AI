@@ -49,7 +49,7 @@ lib/
 | **Code Review**        | ✅               | ✅                | ✅           | ✅            | ❌ Missing          |
 | **Test Execution**     | ✅               | ✅                | ✅           | ✅            | ❌ Missing          |
 | **Collaboration**      | ❌               | ❌                | ❌           | ✅ Real-time  | ❌ Missing          |
-| **Project Memory**     | CLAUDE.md        | Codex context     | .cursorrules | .replit       | ⚠️ CLAUDE.md exists |
+| **Project Memory**     | CLAUDE.md        | Codex context     | .cursorrules | .replit       | ✅ .mintrules + CLAUDE.md |
 
 ---
 
@@ -295,7 +295,7 @@ async function searchDocs(query: string): Promise<SearchResult[]> {
 
 **Implementation**:
 
-- Read existing `CLAUDE.md` / `.cursorrules` files
+- Read existing `CLAUDE.md` / `.mintrules` files
 - Auto-generate project context from package.json, tsconfig
 - Store conversation history in IndexedDB
 - Project-level settings and preferences
