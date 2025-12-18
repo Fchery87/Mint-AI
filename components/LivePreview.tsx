@@ -182,7 +182,7 @@ function createPreviewDocument(componentCode: string): string {
 <body>
   <div id="root"></div>
 
-  <script type="text/babel" data-presets="env,react">
+  <script type="text/babel" data-presets="env,react,typescript">
     console.log('[Preview] Babel script executing!');
     console.log('[Preview] React:', typeof React);
     console.log('[Preview] ReactDOM:', typeof ReactDOM);
@@ -297,10 +297,10 @@ function createPreviewDocument(componentCode: string): string {
   <script>
     // Global error handler
     window.addEventListener('error', (event) => {
-      console.error('Runtime error:', event.error);
+      console.error('Runtime error:', event.error || event.message);
       window.parent.postMessage({
         type: 'preview-error',
-        message: event.error?.toString() || 'Runtime error occurred'
+        message: event.error?.toString() || event.message || 'Runtime error occurred'
       }, '*');
     });
 
@@ -325,40 +325,9 @@ function transformComponentCode(code: string): string {
   let transformed = code;
 
   // Remove import statements (React is already global)
-  transformed = transformed.replace(/^import\s+.*?from\s+['"].*?['"];?\s*$/gm, "");
-
-  // Remove TypeScript type imports
-  transformed = transformed.replace(/^import\s+type\s+.*?from\s+['"].*?['"];?\s*$/gm, "");
-
-  // Remove TypeScript type annotations completely
-  // Remove interface definitions (multiline - more comprehensive)
-  transformed = transformed.replace(/interface\s+\w+[^{]*\{[^}]*\}/gs, "");
-
-  // Remove type definitions
-  transformed = transformed.replace(/type\s+\w+\s*=\s*[^;]+;/gm, "");
-
-  // Remove destructured parameter type annotations: }: TypeName) {
-  // This is the most important fix for the Button component
-  transformed = transformed.replace(/\}\s*:\s*\w+\s*\)\s*\{/g, "}) {");
-
-  // Remove type annotations from regular function parameters
-  // Match patterns like: param: Type, param?: Type, param: Type | Type2
-  transformed = transformed.replace(
-    /(\w+)(\?)?:\s*[A-Z]\w+(<[^>]+>)?(\s*\|\s*[A-Z]\w+(<[^>]+>)?)*(?=[,)])/g,
-    "$1$2"
-  );
-
-  // Remove extends clauses
-  transformed = transformed.replace(/extends\s+[A-Z]\w+<[^>]+>/g, "");
-
-  // Remove generic types like <HTMLButtonElement>
-  transformed = transformed.replace(/<HTML\w+Element>/g, "");
-
-  // Remove React.ReactNode and similar React types
-  transformed = transformed.replace(/:\s*React\.\w+/g, "");
-
-  // Clean up any remaining type annotations (colon followed by type before = or { or ;)
-  transformed = transformed.replace(/:\s*\w+(<[^>]+>)?(?=\s*[{=;,)])/g, "");
+  // Note: we rely on the iframe's Babel `typescript` preset to strip TS syntax safely;
+  // regex-based stripping can corrupt valid JS (e.g. ternaries/object literals).
+  transformed = transformed.replace(/^\s*import\s+[\s\S]*?;\s*$/gm, "");
 
   // Handle different export patterns
 
