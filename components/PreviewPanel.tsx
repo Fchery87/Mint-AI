@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Code, Eye, Copy, Check, FileCode, Download } from "lucide-react";
+import { Code, Eye, Copy, Check, FileCode, Download, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
@@ -10,6 +10,7 @@ import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import LivePreview from "./LivePreview";
 import { downloadComponent, generateFilename } from "@/lib/download";
+import { isPreviewable } from "@/lib/preview-support";
 
 interface PreviewPanelProps {
   componentCode: string;
@@ -18,22 +19,51 @@ interface PreviewPanelProps {
 
 // Detect language from code content
 function detectLanguage(code: string): string {
-  if (code.includes("import React") || code.includes("export default function") || code.includes("tsx")) {
+  // Python
+  if (code.includes("def ") && code.includes(":") && (code.includes("import ") || code.includes("print("))) {
+    return "python";
+  }
+  // Rust
+  if (code.includes("fn ") && code.includes("->") && (code.includes("let ") || code.includes("mut "))) {
+    return "rust";
+  }
+  // Go
+  if (code.includes("package ") && code.includes("func ") && code.includes("import")) {
+    return "go";
+  }
+  // Java
+  if (code.includes("public class") || code.includes("public static void main")) {
+    return "java";
+  }
+  // Vue SFC
+  if (code.includes("<template>") && code.includes("<script")) {
+    return "vue";
+  }
+  // React/TSX
+  if (
+    code.includes("import React") ||
+    (code.includes("export default function") && code.includes("<")) ||
+    (code.includes("export default") && code.includes("tsx"))
+  ) {
     return "tsx";
   }
+  // HTML
+  if (code.includes("<!DOCTYPE") || code.includes("<html") || (code.trim().startsWith("<") && code.includes("</"))) {
+    return "html";
+  }
+  // CSS
+  if (code.includes("{") && code.includes(":") && code.includes(";") && !code.includes("function")) {
+    return "css";
+  }
+  // TypeScript
   if (code.includes("interface ") || code.includes(": string") || code.includes(": number")) {
     return "typescript";
   }
+  // JavaScript
   if (code.includes("function ") || code.includes("const ") || code.includes("=>")) {
     return "javascript";
   }
-  if (code.includes("<html") || code.includes("<div") || code.includes("<!DOCTYPE")) {
-    return "html";
-  }
-  if (code.includes("{") && code.includes(":") && code.includes(";")) {
-    return "css";
-  }
-  return "tsx"; // Default to TSX for React components
+  return "tsx"; // Default to TSX
 }
 
 // Custom theme based on One Dark but enhanced
@@ -106,8 +136,8 @@ export default function PreviewPanel({ componentCode, isStreaming = false }: Pre
     if (!componentCode) return;
 
     try {
-      const filename = generateFilename(componentCode);
-      downloadComponent(componentCode, filename);
+      const filename = generateFilename(componentCode, detectedLanguage);
+      downloadComponent(componentCode, filename, detectedLanguage);
       toast.success(`Downloaded ${filename}`);
     } catch (error) {
       console.error("Failed to download:", error);
@@ -116,6 +146,7 @@ export default function PreviewPanel({ componentCode, isStreaming = false }: Pre
   };
 
   const detectedLanguage = detectLanguage(componentCode);
+  const filename = componentCode ? generateFilename(componentCode, detectedLanguage) : "component.tsx";
   const isDark = mounted && resolvedTheme === "dark";
 
   // Get line count for display
@@ -213,9 +244,32 @@ export default function PreviewPanel({ componentCode, isStreaming = false }: Pre
             {/* Placeholder managed by parent usually */}
           </div>
         ) : activeTab === "preview" ? (
-          <div className="w-full h-full overflow-auto">
-            <LivePreview code={componentCode} />
-          </div>
+          isPreviewable(detectedLanguage) ? (
+            <div className="w-full h-full overflow-auto">
+              <LivePreview code={componentCode} language={detectedLanguage} />
+            </div>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center">
+              <div className="text-center space-y-4 max-w-md px-4">
+                <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center mx-auto">
+                  <AlertTriangle className="w-8 h-8 text-amber-500" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold mb-1">Code Only</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {detectedLanguage.toUpperCase()} code can't be previewed in the browser.
+                    Switch to the <span className="font-medium text-foreground">Code</span> tab to view and copy the generated code.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setActiveTab("code")}
+                  className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+                >
+                  View Code
+                </button>
+              </div>
+            </div>
+          )
         ) : (
           <div className="w-full h-full overflow-auto">
             {/* Code Editor Style Container */}
@@ -228,7 +282,7 @@ export default function PreviewPanel({ componentCode, isStreaming = false }: Pre
                   <div className="w-3 h-3 rounded-full bg-[#27c93f]" />
                 </div>
                 <span className="ml-3 text-xs text-muted-foreground/60 font-mono">
-                  component.tsx
+                  {filename}
                 </span>
                 {isStreaming && (
                   <span className="ml-auto flex items-center gap-1.5 text-xs text-primary">

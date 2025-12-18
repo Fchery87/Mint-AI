@@ -5,6 +5,7 @@ import { AlertCircle, Eye } from "lucide-react";
 
 interface LivePreviewProps {
   code: string;
+  language?: string;
   className?: string;
 }
 
@@ -12,7 +13,7 @@ interface LivePreviewProps {
  * LivePreview renders React components in a sandboxed iframe
  * This is an independent implementation that doesn't rely on Vercel's infrastructure
  */
-export default function LivePreview({ code, className = "" }: LivePreviewProps) {
+export default function LivePreview({ code, language = "tsx", className = "" }: LivePreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -25,8 +26,8 @@ export default function LivePreview({ code, className = "" }: LivePreviewProps) 
     setError(null);
 
     try {
-      // Create the HTML document for the iframe
-      const iframeDocument = createPreviewDocument(code);
+      const iframeDocument =
+        language === "html" ? createHtmlPreviewDocument(code) : createPreviewDocument(code);
 
       setIframeContent(iframeDocument);
 
@@ -113,9 +114,29 @@ export default function LivePreview({ code, className = "" }: LivePreviewProps) 
         sandbox="allow-scripts allow-same-origin"
         className="w-full h-full border-0"
         title="Component Preview"
+        onLoad={language === "html" ? () => setIsLoading(false) : undefined}
       />
     </div>
   );
+}
+
+function createHtmlPreviewDocument(htmlCode: string): string {
+  const trimmed = htmlCode.trim();
+  if (/<!doctype\s+html/i.test(trimmed) || /<html[\s>]/i.test(trimmed)) return trimmed;
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Preview</title>
+</head>
+<body>
+${trimmed}
+</body>
+</html>
+  `.trim();
 }
 
 /**

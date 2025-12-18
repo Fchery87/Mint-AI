@@ -2,16 +2,50 @@
  * Utility functions for downloading generated components
  */
 
+import { getExtensionForLanguage, getDefaultFilename } from './preview-support';
+
+type DownloadLanguage = string; // Any language
+
+function languageToExtension(language?: string): string {
+  return getExtensionForLanguage(language || 'tsx');
+}
+
+function languageToMimeType(language?: string): string {
+  switch ((language || '').toLowerCase()) {
+    case 'html':
+      return 'text/html;charset=utf-8';
+    case 'css':
+      return 'text/css;charset=utf-8';
+    case 'javascript':
+      return 'text/javascript;charset=utf-8';
+    case 'typescript':
+    case 'tsx':
+      return 'text/typescript;charset=utf-8';
+    default:
+      return 'text/plain;charset=utf-8';
+  }
+}
+
 /**
  * Download component code as a file
  */
-export function downloadComponent(code: string, filename?: string): void {
+export function downloadComponent(
+  code: string,
+  filename?: string,
+  language: DownloadLanguage | string = 'tsx'
+): void {
+  const extension = languageToExtension(language);
+
   // Generate filename with timestamp if not provided
-  const defaultFilename = `Component-${new Date().toISOString().slice(0, 10)}-${Date.now()}.tsx`;
-  const finalFilename = filename || defaultFilename;
+  const defaultFilename = `Component-${new Date()
+    .toISOString()
+    .slice(0, 10)}-${Date.now()}.${extension}`;
+  let finalFilename = filename || defaultFilename;
+  if (!finalFilename.includes('.'))
+    finalFilename = `${finalFilename}.${extension}`;
 
   // Create blob with the code
-  const blob = new Blob([code], { type: 'text/typescript' });
+  const blob = new Blob([code], { type: languageToMimeType(language) });
   const url = URL.createObjectURL(blob);
 
   // Create temporary link and trigger download
@@ -55,17 +89,49 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 }
 
 /**
- * Download component with dependencies as a ZIP
- * (Future enhancement - requires JSZip library)
+ * Download a project as a ZIP file
+ */
+export async function downloadProjectAsZip(
+  files: Array<{ path: string; content: string }>,
+  projectName: string = 'project'
+): Promise<void> {
+  // Dynamic import to avoid SSR issues
+  const JSZip = (await import('jszip')).default;
+  const zip = new JSZip();
+
+  // Add each file to the ZIP
+  files.forEach((file) => {
+    zip.file(file.path, file.content);
+  });
+
+  // Generate the ZIP blob
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const url = URL.createObjectURL(blob);
+
+  // Create temporary link and trigger download
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${projectName}.zip`;
+  document.body.appendChild(link);
+  link.click();
+
+  // Cleanup
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
+/**
+ * Download component with dependencies as a ZIP (legacy - use downloadProjectAsZip)
  */
 export function downloadComponentWithDeps(
   code: string,
   _dependencies?: Record<string, string>
 ): void {
-  // TODO: Implement when JSZip is added
-  // For now, just download the component file
+  // For backward compatibility, just download the component file
   downloadComponent(code);
-  console.warn('Full package download not yet implemented. Downloaded component only.');
+  console.warn(
+    'Full package download not yet implemented. Downloaded component only.'
+  );
 }
 
 /**
@@ -96,13 +162,21 @@ export function extractComponentName(code: string): string | null {
 /**
  * Generate a smart filename based on component code
  */
-export function generateFilename(code: string): string {
+export function generateFilename(
+  code: string,
+  language: DownloadLanguage | string = 'tsx'
+): string {
   const componentName = extractComponentName(code);
-  const timestamp = new Date().toISOString().slice(0, 10);
+  const extension = languageToExtension(language);
 
-  if (componentName) {
-    return `${componentName}.tsx`;
+  // If we can extract a component name, use it
+  if (
+    componentName &&
+    ['tsx', 'ts', 'jsx', 'js', 'vue', 'svelte'].includes(extension)
+  ) {
+    return `${componentName}.${extension}`;
   }
 
-  return `Component-${timestamp}.tsx`;
+  // Otherwise use smart defaults from preview-support
+  return getDefaultFilename(language);
 }

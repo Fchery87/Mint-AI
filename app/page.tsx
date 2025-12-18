@@ -5,11 +5,13 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import ChatPanel from "@/components/ChatPanel";
 import PreviewPanel from "@/components/PreviewPanel";
+import ProjectPreviewPanel from "@/components/ProjectPreviewPanel";
 import { ResizablePanels } from "@/components/ResizablePanels";
-import { ChatRequest } from "./api/chat/route";
+import type { ChatRequest } from "./api/chat/route";
 import { Terminal } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
 import { ModeToggle } from "@/components/mode-toggle";
+import { parseProjectOutput, type ProjectOutput } from "@/lib/project-types";
 
 interface ChatMessage {
   role: string;
@@ -18,11 +20,15 @@ interface ChatMessage {
   isReasoningComplete?: boolean;
 }
 
+type OutputFormat = string; // Any language/framework
+
 export default function Home() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [chatId, setChatId] = useState<string | undefined>();
   const [componentCode, setComponentCode] = useState("");
+  const [projectOutput, setProjectOutput] = useState<ProjectOutput | null>(null);
+  const [outputFormat, _setOutputFormat] = useState<OutputFormat>("React");
   const [inputStatus, setInputStatus] = useState<"ready" | "submitting" | "streaming" | "error">("ready");
   const [sessionCost, setSessionCost] = useState<{ cost: string; tokens: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -52,6 +58,7 @@ export default function Home() {
       const chatRequest: ChatRequest = {
         message,
         chatId,
+        outputFormat,
       };
 
       const response = await fetch("/api/chat", {
@@ -132,6 +139,10 @@ export default function Home() {
                   setChatId(data.chatId);
                 }
                 setComponentCode(data.code);
+                
+                // Parse the response to detect project mode
+                const parsed = parseProjectOutput(data.code);
+                setProjectOutput(parsed);
 
                 // Update session cost if available
                 if (data.usage) {
@@ -141,7 +152,7 @@ export default function Home() {
                   });
                 }
 
-                toast.success("Component generated!");
+                toast.success(parsed.type === "project" ? "Project generated!" : "Component generated!");
               } else if (data.type === "error") {
                 throw new Error(data.error);
               }
@@ -234,7 +245,15 @@ export default function Home() {
                     </div>
                   </div>
                 ) : null}
-                <PreviewPanel componentCode={componentCode} isStreaming={isLoading} />
+                {projectOutput?.type === "project" ? (
+                  <ProjectPreviewPanel
+                    files={projectOutput.files}
+                    projectName={projectOutput.name}
+                    isStreaming={isLoading}
+                  />
+                ) : (
+                  <PreviewPanel componentCode={componentCode} isStreaming={isLoading} />
+                )}
               </div>
             </motion.div>
           }

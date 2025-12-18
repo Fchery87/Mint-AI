@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { z } from 'zod';
 import * as Sentry from '@sentry/nextjs';
-import { SYSTEM_PROMPT } from '@/lib/prompts';
+import { getSystemPrompt, type OutputFormat } from '@/lib/prompts';
 import { checkRateLimit, getClientIp, formatRetryAfter } from '@/lib/ratelimit';
 import { getActiveProvider, type LLMProvider } from '@/lib/providers';
-import { trackUsage, getSessionCost, formatCost, formatTokens } from '@/lib/cost-tracking';
+import {
+  trackUsage,
+  getSessionCost,
+  formatCost,
+  formatTokens,
+} from '@/lib/cost-tracking';
 
 // Lazy initialize OpenAI-compatible client based on active provider
 let openaiClient: OpenAI | null = null;
@@ -34,11 +39,13 @@ const chatRequestSchema = z.object({
     .min(1, 'Message cannot be empty')
     .max(5000, 'Message too long (max 5000 characters)'),
   chatId: z.string().optional(),
+  outputFormat: z.string().optional(),
 });
 
 export interface ChatRequest {
   message: string;
   chatId?: string;
+  outputFormat?: OutputFormat;
 }
 
 export interface ChatResponse {
@@ -57,17 +64,38 @@ function generateChatId(): string {
   return `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 }
 
-function extractCodeFromResponse(text: string): string {
-  // Extract code from markdown code blocks
-  const codeBlockRegex = /```(?:typescript|tsx|jsx|react)?\n([\s\S]*?)```/;
-  const match = text.match(codeBlockRegex);
+function extractCodeFromResponse(
+  text: string,
+  outputFormat: OutputFormat
+): string {
+  // Check for multi-file project format (```file:path/to/file.ext)
+  const fileMarkerPattern = /```file:([^\n]+)\n([\s\S]*?)```/g;
+  const fileBlocks = Array.from(text.matchAll(fileMarkerPattern));
 
-  if (match && match[1]) {
-    return match[1].trim();
+  // If we have file markers, return the full code section with markers preserved
+  if (fileBlocks.length > 0) {
+    // Return all the file blocks with markers intact for parsing
+    return fileBlocks
+      .map((match) => `\`\`\`file:${match[1]}\n${match[2]}\`\`\``)
+      .join('\n\n');
   }
 
-  // If no code block found, return the whole response
-  return text.trim();
+  // Single-file extraction (original behavior)
+  const fenceRegex = /```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g;
+  const blocks = Array.from(text.matchAll(fenceRegex)).map((match) => ({
+    lang: (match[1] || '').toLowerCase(),
+    code: match[2] || '',
+  }));
+
+  if (blocks.length === 0) return text.trim();
+
+  const preferredLangs =
+    outputFormat === 'html'
+      ? new Set(['html'])
+      : new Set(['tsx', 'typescript', 'jsx', 'react']);
+
+  const preferred = blocks.find((b) => b.lang && preferredLangs.has(b.lang));
+  return (preferred || blocks[0]).code.trim();
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -115,6 +143,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     }
 
     const { message, chatId } = validationResult.data;
+    const outputFormat: OutputFormat =
+      validationResult.data.outputFormat || 'React';
 
     // Get or create chat history
     const currentChatId = chatId || generateChatId();
@@ -128,11 +158,12 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     // Get the active provider and client
     const { client, provider } = getOpenAIClient();
+    const systemPrompt = getSystemPrompt(outputFormat);
 
     // Call LLM API with streaming (include usage data)
     const stream = await client.chat.completions.create({
       model: provider.model,
-      messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...history],
+      messages: [{ role: 'system', content: systemPrompt }, ...history],
       max_tokens: 4096,
       stream: true,
       temperature: 0.2,
@@ -250,6 +281,19 @@ export async function POST(req: NextRequest): Promise<Response> {
                       controller.enqueue(encoder.encode(`data: ${data}\n\n`));
                     }
                     buffer = buffer.substring(idx + 3);
+                    // Strip optional language identifier line (e.g. "typescript\\n")
+                    const lineEnd = buffer.indexOf('\n');
+                    if (lineEnd !== -1) {
+                      const firstLine = buffer.substring(0, lineEnd).trim();
+                      if (!firstLine) {
+                        buffer = buffer.substring(lineEnd + 1);
+                      } else if (
+                        firstLine.length <= 20 &&
+                        /^[a-zA-Z0-9_-]+$/.test(firstLine)
+                      ) {
+                        buffer = buffer.substring(lineEnd + 1);
+                      }
+                    }
                     inCodeBlock = true;
                   } else {
                     // Ending code block - send accumulated code
@@ -311,7 +355,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           chatHistories.set(currentChatId, history);
 
           // Extract code from the response
-          const code = extractCodeFromResponse(fullResponse);
+          const code = extractCodeFromResponse(fullResponse, outputFormat);
 
           // Track usage and calculate cost
           let costData = null;
