@@ -1,13 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Code, Eye, Copy, Check, FileCode } from "lucide-react";
+import { Code, Eye, Copy, Check, FileCode, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useTheme } from "next-themes";
+import { toast } from "sonner";
 import LivePreview from "./LivePreview";
+import { downloadComponent, generateFilename } from "@/lib/download";
 
 interface PreviewPanelProps {
   componentCode: string;
@@ -100,6 +102,19 @@ export default function PreviewPanel({ componentCode, isStreaming = false }: Pre
     }
   };
 
+  const handleDownload = () => {
+    if (!componentCode) return;
+
+    try {
+      const filename = generateFilename(componentCode);
+      downloadComponent(componentCode, filename);
+      toast.success(`Downloaded ${filename}`);
+    } catch (error) {
+      console.error("Failed to download:", error);
+      toast.error("Failed to download component");
+    }
+  };
+
   const detectedLanguage = detectLanguage(componentCode);
   const isDark = mounted && resolvedTheme === "dark";
 
@@ -156,27 +171,37 @@ export default function PreviewPanel({ componentCode, isStreaming = false }: Pre
           )}
           
           {componentCode && (
-            <button
-              onClick={handleCopy}
-              className={cn(
-                "flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 border border-transparent",
-                copied 
-                  ? "bg-green-500/10 text-green-500 border-green-500/20" 
-                  : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground border-border/40"
-              )}
-            >
-              {copied ? (
-                <>
-                  <Check size={14} />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Copy size={14} />
-                  Copy
-                </>
-              )}
-            </button>
+            <>
+              <button
+                onClick={handleDownload}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 border border-transparent bg-mint-500 text-white hover:bg-mint-600"
+                title="Download component file"
+              >
+                <Download size={14} />
+                Download
+              </button>
+              <button
+                onClick={handleCopy}
+                className={cn(
+                  "flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all duration-200 border border-transparent",
+                  copied
+                    ? "bg-green-500/10 text-green-500 border-green-500/20"
+                    : "bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground border-border/40"
+                )}
+              >
+                {copied ? (
+                  <>
+                    <Check size={14} />
+                    Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy size={14} />
+                    Copy
+                  </>
+                )}
+              </button>
+            </>
           )}
         </div>
       </div>

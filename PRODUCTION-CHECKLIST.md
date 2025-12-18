@@ -1,21 +1,21 @@
 # Production Readiness Checklist
 
-## 📊 Current Status: ~55% Complete
+## 📊 Current Status: ~70% Complete
 
 **Legend**: ✅ Complete | ⏳ In Progress | ❌ Not Started
 
 ### Quick Summary
-- **Critical Items**: 11/20 complete (55%)
-- **Important Items**: 11/20 complete (55%)
+- **Critical Items**: 13/20 complete (65%)
+- **Important Items**: 15/20 complete (75%)
 - **Nice to Have**: 0/14 complete (0%)
-- **Overall Progress**: 22/54 items (41%)
+- **Overall Progress**: 28/54 items (52%)
 
 ### Priority Gaps
 1. 🔴 **Database/Persistence** - Critical blocker for production
-2. 🔴 **CORS/CSP Headers** - Security risk
-3. 🟡 **Monitoring** - No error tracking or analytics
-4. 🟡 **Download Feature** - UX gap
-5. 🟢 **Testing Infrastructure** - No tests yet
+2. 🟡 **Response Time Monitoring** - No performance tracking
+3. 🟡 **User Analytics** - No usage analytics (consider Plausible)
+4. 🟢 **Testing Infrastructure** - No tests yet
+5. 🟢 **Component Version History** - UX enhancement
 
 ---
 
@@ -23,7 +23,7 @@
 
 ### 1. Environment Variables Validation
 - [x] Add runtime validation for `ANTHROPIC_API_KEY` (lib/env.ts)
-- [ ] Create `.env.production` template
+- [x] Create `.env.production` template
 - [x] Document all required env vars (.env.local.example)
 
 ### 2. Error Boundaries
@@ -39,8 +39,8 @@
 - [ ] Set max tokens per request (currently hardcoded at 4096)
 
 ### 4. Security
-- [ ] Add CORS configuration
-- [ ] Implement CSP headers
+- [x] Add CORS configuration (next.config.ts with ALLOWED_ORIGINS env var)
+- [x] Implement CSP headers (comprehensive policy in next.config.ts)
 - [x] Sanitize user inputs (Zod validation in API route)
 - [x] Add request validation middleware (Zod schema in app/api/chat/route.ts)
 - [ ] Enable HTTPS only in production (relies on Vercel)
@@ -67,14 +67,14 @@
 
 ### 8. Enhanced UX
 - [x] Syntax highlighting for code (react-syntax-highlighter)
-- [ ] Download component as file
+- [x] Download component as file (lib/download.ts + PreviewPanel download button)
 - [ ] Component version history
 - [x] Better mobile responsiveness (Tailwind responsive + ResizablePanels)
 - [ ] Keyboard shortcuts
 
 ### 9. Monitoring & Analytics
-- [ ] Add Sentry or similar for error tracking
-- [ ] Track API usage and costs
+- [x] Add Sentry or similar for error tracking (Sentry SDK integrated in ErrorBoundary + API routes)
+- [x] Track API usage and costs (lib/cost-tracking.ts with session-based tracking)
 - [ ] Monitor response times
 - [ ] User analytics (Plausible/Posthog)
 

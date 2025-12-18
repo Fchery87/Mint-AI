@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
 import { z } from 'zod';
+import * as Sentry from '@sentry/nextjs';
 import { SYSTEM_PROMPT } from '@/lib/prompts';
 import { checkRateLimit, getClientIp, formatRetryAfter } from '@/lib/ratelimit';
 import { getActiveProvider, type LLMProvider } from '@/lib/providers';
+import { trackUsage, getSessionCost, formatCost, formatTokens } from '@/lib/cost-tracking';
 
 // Lazy initialize OpenAI-compatible client based on active provider
 let openaiClient: OpenAI | null = null;
@@ -127,18 +129,22 @@ export async function POST(req: NextRequest): Promise<Response> {
     // Get the active provider and client
     const { client, provider } = getOpenAIClient();
 
-    // Call LLM API with streaming
+    // Call LLM API with streaming (include usage data)
     const stream = await client.chat.completions.create({
       model: provider.model,
       messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...history],
       max_tokens: 4096,
       stream: true,
       temperature: 0.2,
+      stream_options: {
+        include_usage: true,
+      },
     });
 
     // Create a readable stream for the response
     const encoder = new TextEncoder();
     let fullResponse = '';
+    let usageData: any = null;
 
     const readableStream = new ReadableStream({
       async start(controller) {
@@ -151,6 +157,12 @@ export async function POST(req: NextRequest): Promise<Response> {
 
           for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || '';
+
+            // Capture usage data if present (sent in final chunk)
+            if (chunk.usage) {
+              usageData = chunk.usage;
+            }
+
             if (content) {
               fullResponse += content;
               buffer += content;
@@ -301,16 +313,43 @@ export async function POST(req: NextRequest): Promise<Response> {
           // Extract code from the response
           const code = extractCodeFromResponse(fullResponse);
 
-          // Send final message with code
+          // Track usage and calculate cost
+          let costData = null;
+          if (usageData) {
+            trackUsage(currentChatId, {
+              promptTokens: usageData.prompt_tokens || 0,
+              completionTokens: usageData.completion_tokens || 0,
+              totalTokens: usageData.total_tokens || 0,
+              model: provider.model,
+              timestamp: Date.now(),
+            });
+
+            const sessionCost = getSessionCost(currentChatId);
+            costData = {
+              cost: formatCost(sessionCost.totalCost),
+              tokens: formatTokens(usageData.total_tokens),
+              rawCost: sessionCost.totalCost,
+              rawTokens: usageData.total_tokens,
+            };
+          }
+
+          // Send final message with code and cost data
           const finalData = JSON.stringify({
             type: 'done',
             chatId: currentChatId,
             code,
             explanation: explanationBuffer,
+            usage: costData,
           });
           controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
           controller.close();
         } catch (error) {
+          // Log to Sentry
+          Sentry.captureException(error, {
+            tags: { source: 'chat-stream' },
+            extra: { chatId: currentChatId },
+          });
+
           const errorData = JSON.stringify({
             type: 'error',
             error:
@@ -331,6 +370,15 @@ export async function POST(req: NextRequest): Promise<Response> {
     });
   } catch (error) {
     console.error('Chat error:', error);
+
+    // Log to Sentry
+    Sentry.captureException(error, {
+      tags: { source: 'chat-api' },
+      extra: {
+        clientIp: getClientIp(req),
+      },
+    });
+
     return NextResponse.json(
       {
         error:

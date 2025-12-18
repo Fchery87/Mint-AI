@@ -24,6 +24,7 @@ export default function Home() {
   const [chatId, setChatId] = useState<string | undefined>();
   const [componentCode, setComponentCode] = useState("");
   const [inputStatus, setInputStatus] = useState<"ready" | "submitting" | "streaming" | "error">("ready");
+  const [sessionCost, setSessionCost] = useState<{ cost: string; tokens: string } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -131,6 +132,15 @@ export default function Home() {
                   setChatId(data.chatId);
                 }
                 setComponentCode(data.code);
+
+                // Update session cost if available
+                if (data.usage) {
+                  setSessionCost({
+                    cost: data.usage.cost,
+                    tokens: data.usage.tokens,
+                  });
+                }
+
                 toast.success("Component generated!");
               } else if (data.type === "error") {
                 throw new Error(data.error);
@@ -169,6 +179,12 @@ export default function Home() {
           <Logo />
         </div>
         <div className="flex items-center gap-3">
+          {sessionCost && (
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-mint-500/10 border border-mint-500/20 rounded-full text-xs font-medium text-mint-600 dark:text-mint-400">
+              <Terminal size={12} />
+              <span>{sessionCost.tokens} · {sessionCost.cost}</span>
+            </div>
+          )}
           <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-muted/50 rounded-full text-xs font-medium text-muted-foreground">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             System Online
