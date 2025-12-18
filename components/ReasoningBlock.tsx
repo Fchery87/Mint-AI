@@ -18,11 +18,16 @@ export function ReasoningBlock({ content, isStreaming = false, className }: Reas
   useEffect(() => {
     if (isStreaming) {
       setIsOpen(true);
-    } else if (content) {
+      return undefined;
+    }
+
+    if (content) {
       // Auto-collapse after streaming finishes
       const timer = setTimeout(() => setIsOpen(false), 1500);
       return () => clearTimeout(timer);
     }
+
+    return undefined;
   }, [isStreaming, content]);
 
   if (!content.trim()) return null;

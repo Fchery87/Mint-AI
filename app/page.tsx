@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { motion } from "framer-motion";
 import ChatPanel from "@/components/ChatPanel";
 import PreviewPanel from "@/components/PreviewPanel";
+import { ResizablePanels } from "@/components/ResizablePanels";
 import { ChatRequest } from "./api/chat/route";
 import { Terminal } from "lucide-react";
 import { Logo } from "@/components/ui/logo";
@@ -22,7 +23,7 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [chatId, setChatId] = useState<string | undefined>();
   const [componentCode, setComponentCode] = useState("");
-  const [isReasoningStreaming, setIsReasoningStreaming] = useState(false);
+  const [inputStatus, setInputStatus] = useState<"ready" | "submitting" | "streaming" | "error">("ready");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -40,7 +41,7 @@ export default function Home() {
     const userMessage: ChatMessage = { role: "user", content: message };
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
-    setIsReasoningStreaming(false);
+    setInputStatus("submitting");
 
     // Add placeholder for assistant message (will be updated as stream arrives)
     const assistantIndex = messages.length + 1;
@@ -89,7 +90,7 @@ export default function Home() {
               if (data.type === "reasoning-chunk") {
                 // Update reasoning content
                 streamedReasoning += data.content;
-                setIsReasoningStreaming(true);
+                setInputStatus("streaming");
                 setMessages((prev) => {
                   const updated = [...prev];
                   updated[assistantIndex] = {
@@ -101,7 +102,6 @@ export default function Home() {
                 });
               } else if (data.type === "reasoning-complete") {
                 // Mark reasoning as complete
-                setIsReasoningStreaming(false);
                 setMessages((prev) => {
                   const updated = [...prev];
                   updated[assistantIndex] = {
@@ -147,12 +147,13 @@ export default function Home() {
         error instanceof Error ? error.message : "Failed to generate component";
       toast.error(errorMessage);
       console.error("Error:", error);
+      setInputStatus("error");
 
       // Remove the placeholder message on error
       setMessages((prev) => prev.slice(0, -1));
     } finally {
       setIsLoading(false);
-      setIsReasoningStreaming(false);
+      setTimeout(() => setInputStatus("ready"), 500);
     }
   };
 
@@ -177,43 +178,51 @@ export default function Home() {
       </motion.header>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Chat Section */}
-        <motion.div 
-          initial={{ x: -20, opacity: 0 }}
-          animate={{ x: 0, opacity: 1 }}
-          transition={{ delay: 0.1 }}
-          className="w-[400px] border-r border-border/40 flex flex-col bg-card/30"
-        >
-          <ChatPanel
-            messages={messages}
-            isLoading={isLoading}
-            onSendMessage={handleSendMessage}
-            messagesEndRef={messagesEndRef}
-          />
-        </motion.div>
-
-        {/* Preview Section */}
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.98 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ delay: 0.2 }}
-          className="flex-1 flex flex-col bg-muted/30 p-4"
-        >
-          <div className="flex-1 rounded-xl border border-border/40 bg-background shadow-sm overflow-hidden relative">
-            {!componentCode && !isLoading && messages.length === 0 ? (
-               <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40 pointer-events-none">
-                 <div className="text-center space-y-4">
-                   <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-                     <Terminal size={32} />
-                   </div>
-                   <p className="text-lg font-medium">Ready to build</p>
-                 </div>
-               </div>
-            ) : null}
-            <PreviewPanel componentCode={componentCode} isStreaming={isLoading} />
-          </div>
-        </motion.div>
+      <div className="flex-1 overflow-hidden">
+        <ResizablePanels
+          defaultLeftWidth={400}
+          minLeftWidth={300}
+          maxLeftWidth={800}
+          storageKey="mint-ai-chat-width"
+          leftPanel={
+            <motion.div
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: 0.1 }}
+              className="h-full flex flex-col bg-card/30"
+            >
+              <ChatPanel
+                messages={messages}
+                isLoading={isLoading}
+                onSendMessage={handleSendMessage}
+                messagesEndRef={messagesEndRef}
+                status={inputStatus}
+              />
+            </motion.div>
+          }
+          rightPanel={
+            <motion.div
+              initial={{ opacity: 0, scale: 0.98 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2 }}
+              className="h-full flex flex-col bg-muted/30 p-4"
+            >
+              <div className="flex-1 rounded-xl border border-border/40 bg-background shadow-sm overflow-hidden relative">
+                {!componentCode && !isLoading && messages.length === 0 ? (
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40 pointer-events-none">
+                    <div className="text-center space-y-4">
+                      <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
+                        <Terminal size={32} />
+                      </div>
+                      <p className="text-lg font-medium">Ready to build</p>
+                    </div>
+                  </div>
+                ) : null}
+                <PreviewPanel componentCode={componentCode} isStreaming={isLoading} />
+              </div>
+            </motion.div>
+          }
+        />
       </div>
     </main>
   );

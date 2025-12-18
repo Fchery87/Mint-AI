@@ -1,9 +1,25 @@
-import { useState, useRef } from "react";
-import { Send } from "lucide-react";
+import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { Logo } from "@/components/ui/logo";
 import { ReasoningBlock } from "@/components/ReasoningBlock";
+import {
+  PromptInputProvider,
+  PromptInput,
+  PromptInputAttachments,
+  PromptInputAttachmentCard,
+  PromptInputBody,
+  PromptInputTextarea,
+  PromptInputFooter,
+  PromptInputTools,
+  PromptInputSubmit,
+  PromptInputActionMenu,
+  PromptInputActionMenuTrigger,
+  PromptInputActionMenuContent,
+  PromptInputActionAddAttachments,
+  PromptInputSpeechButton,
+  PromptInputMessage,
+} from "@/components/prompt-input";
 
 interface Message {
   role: string;
@@ -17,6 +33,7 @@ interface ChatPanelProps {
   isLoading: boolean;
   onSendMessage: (message: string) => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  status?: "ready" | "submitting" | "streaming" | "error";
 }
 
 export default function ChatPanel({
@@ -25,45 +42,26 @@ export default function ChatPanel({
   onSendMessage,
   messagesEndRef,
 }: ChatPanelProps) {
-  const [input, setInput] = useState("");
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (input.trim() && !isLoading) {
-      onSendMessage(input);
-      setInput("");
-      // Reset textarea height
-      if (inputRef.current) {
-        inputRef.current.style.height = "auto";
+  const handleSubmit = (message: PromptInputMessage) => {
+    if (message.text.trim() && !isLoading) {
+      onSendMessage(message.text);
+      // Note: attachments handling can be added later when API supports it
+      if (message.files && message.files.length > 0) {
+        console.log("Attachments received:", message.files);
+        // TODO: Handle file uploads when API supports it
       }
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit(e as any);
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    // Auto-resize textarea
-    if (inputRef.current) {
-      inputRef.current.style.height = "auto";
-      inputRef.current.style.height = Math.min(
-        inputRef.current.scrollHeight,
-        150
-      ) + "px";
     }
   };
 
   // Check if the last message is currently streaming reasoning
   const lastMessage = messages[messages.length - 1];
-  const isReasoningStreaming = lastMessage?.role === "assistant" && 
-    lastMessage?.reasoning && 
-    !lastMessage?.isReasoningComplete;
+  const isReasoningStreaming = Boolean(
+    lastMessage?.role === "assistant" &&
+    lastMessage?.reasoning &&
+    !lastMessage?.isReasoningComplete
+  );
 
   return (
     <div className="flex flex-col h-full">
@@ -160,33 +158,35 @@ export default function ChatPanel({
 
       {/* Input */}
       <div className="p-4 border-t border-border/40 bg-background/50 backdrop-blur-sm">
-        <form 
-          onSubmit={handleSubmit} 
-          className="relative flex items-end gap-2 p-2 rounded-xl bg-muted/50 border border-border/50 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 transition-all"
-        >
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder="Describe what you want to build..."
-            disabled={isLoading}
-            className="flex-1 bg-transparent border-0 focus:ring-0 text-sm px-2 py-2 min-h-[44px] max-h-[150px] resize-none placeholder:text-muted-foreground/70"
-            rows={1}
-          />
-          <button
-            type="submit"
-            disabled={isLoading || !input.trim()}
-            className={cn(
-              "p-2 rounded-lg transition-all duration-200",
-              input.trim() && !isLoading 
-                ? "bg-primary text-primary-foreground shadow-sm hover:translate-y-[-1px]" 
-                : "bg-muted text-muted-foreground cursor-not-allowed opacity-50"
-            )}
+        <PromptInputProvider onSubmit={handleSubmit}>
+          <PromptInput
+            globalDrop
+            multiple
+            className="rounded-xl bg-muted/50 border border-border/50 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 transition-all"
           >
-            <Send size={16} />
-          </button>
-        </form>
+            <PromptInputAttachments>
+              {(attachment) => <PromptInputAttachmentCard data={attachment} />}
+            </PromptInputAttachments>
+            <PromptInputBody>
+              <PromptInputTextarea
+                ref={textareaRef}
+                placeholder="Describe what you want to build..."
+              />
+            </PromptInputBody>
+            <PromptInputFooter>
+              <PromptInputTools>
+                <PromptInputActionMenu>
+                  <PromptInputActionMenuTrigger />
+                  <PromptInputActionMenuContent>
+                    <PromptInputActionAddAttachments />
+                  </PromptInputActionMenuContent>
+                </PromptInputActionMenu>
+                <PromptInputSpeechButton textareaRef={textareaRef} />
+              </PromptInputTools>
+              <PromptInputSubmit />
+            </PromptInputFooter>
+          </PromptInput>
+        </PromptInputProvider>
         <div className="text-[10px] text-center text-muted-foreground mt-2">
           Mint AI can make mistakes. Please check the code.
         </div>
