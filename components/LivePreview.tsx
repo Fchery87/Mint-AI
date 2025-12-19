@@ -41,13 +41,14 @@ export default function LivePreview({ code, language = "tsx", className = "" }: 
 
       // Listen for errors from iframe
       const handleIframeError = (event: MessageEvent) => {
-        console.log('[LivePreview] Message received:', event.data);
-        if (event.data?.type === "preview-error") {
-          console.log('[LivePreview] Error detected:', event.data.message);
-          setError(event.data.message);
+        // Only accept messages from the current preview iframe window
+        if (event.source !== iframeRef.current?.contentWindow) return;
+
+        const data = event.data as any;
+        if (data?.type === "preview-error") {
+          setError(String(data.message || "Preview error"));
           setIsLoading(false);
-        } else if (event.data?.type === "preview-ready") {
-          console.log('[LivePreview] Preview ready!');
+        } else if (data?.type === "preview-ready") {
           setIsLoading(false);
         }
       };
@@ -111,7 +112,8 @@ export default function LivePreview({ code, language = "tsx", className = "" }: 
       <iframe
         ref={iframeRef}
         srcDoc={iframeContent}
-        sandbox="allow-scripts allow-same-origin"
+        // Treat generated code as hostile: isolate origin, allow scripts only
+        sandbox="allow-scripts"
         className="w-full h-full border-0"
         title="Component Preview"
         onLoad={language === "html" ? () => setIsLoading(false) : undefined}

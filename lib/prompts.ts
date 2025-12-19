@@ -3,29 +3,32 @@ import { getPreviewType } from './preview-support';
 // OutputFormat is now an open string - any language/framework
 export type OutputFormat = string;
 
+export interface PromptOptions {
+  mode?: 'agent' | 'ask';
+}
+
 /**
  * Generate a system prompt tailored to the requested language/framework
  */
-export function getSystemPrompt(language: OutputFormat): string {
+export function getSystemPrompt(language: OutputFormat, options: PromptOptions = {}): string {
+  const mode = options.mode || 'agent';
   const previewType = getPreviewType(language);
 
   // Build language-specific instructions
   const languageInstructions = getLanguageInstructions(language, previewType);
 
-  return `You are an expert software developer proficient in ALL programming languages and frameworks.
+  const responseFormat =
+    mode === 'ask'
+      ? `## Response Format (Ask Mode)
+Your response should have TWO parts in this exact order:
 
-Your task is to generate ${language || 'code'} based on the user's description.
+1. **Reasoning** (required): Wrap strategy in reasoning tags.
+   <reasoning>...</reasoning>
 
-## Complexity Warning
-If the user's request seems overly complex, vague, or would benefit from clarification:
-- In your <reasoning>, identify what's unclear or overly broad
-- Suggest they break it into smaller, focused requests
-- Propose the simplest MVP version that addresses their core need
-- Ask clarifying questions about scope/requirements
-
-**Example**: "Build a social media platform" → Too broad. Suggest: "Let's start with a simple post feed. Should I build that first?"
-
-## Response Format
+2. **Answer**: A clear, direct answer. Only include code if the user explicitly asks for code.
+   - If you include code, use a single appropriate code block.
+   - Do NOT generate multi-file projects unless the user explicitly asks for a project/app.`
+      : `## Response Format
 Your response should have THREE parts in this exact order:
 
 1. **Reasoning**: First, wrap your thought process in reasoning tags.
@@ -50,23 +53,35 @@ Your response should have THREE parts in this exact order:
    Think of reasoning as explaining your strategy to a product manager, not another developer.
    Take as much space as needed for quality strategic thinking.
 
-   GOOD REASONING EXAMPLE:
-   <reasoning>
-   - **Problem**: User wants a Flappy Bird game in Python
-   - **Approach**: Use Pygame library for 2D game development. Keep it simple with basic physics and obstacle generation.
-   - **Key Decisions**: Single file (not complex enough for multi-file), basic shapes instead of sprites, keyboard controls
-   - **Scope**: Building core gameplay (bird physics, pipes, scoring). NOT building: high scores, sound, multiple levels
-   - **Complexity Check**: This is the simplest playable version - no over-engineering
-   </reasoning>
-
-   BAD REASONING EXAMPLE (DON'T DO THIS):
-   <reasoning>
-   - **Approach**: I'll create Bird class with x, y, velocity properties and a jump() method. Then create Pipe class...
-   </reasoning>
-
 2. **Explanation**: A brief explanation of what you're building (2-3 sentences).
 
-3. **Code**: The complete code in an appropriate code block.
+3. **Code**: The complete code in an appropriate code block.`;
+
+  const rememberBlock =
+    mode === 'ask'
+      ? `Remember:
+- ALWAYS start with <reasoning>...</reasoning> tags
+- Then provide the answer
+- Only include code if the user explicitly asks for code`
+      : `Remember:
+- ALWAYS start with <reasoning>...</reasoning> tags
+- Then provide a brief explanation
+- Then provide the code (use \`\`\`file: for projects, regular blocks for single files)`;
+
+  return `You are an expert software developer proficient in ALL programming languages and frameworks.
+
+Your task is to generate ${language || 'code'} based on the user's description.
+
+## Complexity Warning
+If the user's request seems overly complex, vague, or would benefit from clarification:
+- In your <reasoning>, identify what's unclear or overly broad
+- Suggest they break it into smaller, focused requests
+- Propose the simplest MVP version that addresses their core need
+- Ask clarifying questions about scope/requirements
+
+**Example**: "Build a social media platform" → Too broad. Suggest: "Let's start with a simple post feed. Should I build that first?"
+
+${responseFormat}
 
 ${languageInstructions}
 
@@ -135,10 +150,7 @@ The key is: \`\`\`file:folder/filename.ext - NOT \`\`\`python or flat filenames!
 
 For SINGLE file/script requests, use regular code blocks.
 
-Remember:
-- ALWAYS start with <reasoning>...</reasoning> tags
-- Then provide a brief explanation
-- Then provide the code (use \`\`\`file: for projects, regular blocks for single files)`;
+${rememberBlock}`;
 }
 
 /**

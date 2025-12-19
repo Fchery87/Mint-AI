@@ -23,6 +23,7 @@ export function PyodideExecutor({ code, className, autoRun = false }: PyodideExe
   const [status, setStatus] = useState<'idle' | 'loading' | 'running' | 'done' | 'error'>('idle');
   const [result, setResult] = useState<PythonExecutionResult | null>(null);
   const [pyodideStatus, setPyodideStatus] = useState(getPyodideStatus());
+  const usesPygame = code.includes('import pygame') || code.includes('pygame.');
 
   useEffect(() => {
     if (autoRun && code && status === 'idle') {
@@ -51,6 +52,11 @@ export function PyodideExecutor({ code, className, autoRun = false }: PyodideExe
 
   return (
     <div className={cn('flex flex-col h-full', className)}>
+      {usesPygame && (
+        <div className="px-4 py-2 text-xs border-b border-border/40 bg-amber-500/10 text-amber-700 dark:text-amber-300">
+          Pyodide can’t run `pygame` in the browser. Generate a browser-based version (HTML canvas/JS) or a local pygame script.
+        </div>
+      )}
       {/* Code Display */}
       <div className="flex-1 overflow-auto border-b border-border/40">
         <div className="sticky top-0 z-10 flex items-center justify-between px-4 py-2 bg-muted/50 backdrop-blur border-b border-border/40">

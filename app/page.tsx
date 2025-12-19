@@ -4,8 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import ChatPanel from "@/components/ChatPanel";
-import PreviewPanel from "@/components/PreviewPanel";
-import ProjectPreviewPanel from "@/components/ProjectPreviewPanel";
+import WorkspacePanel from "@/components/WorkspacePanel";
 import { ResizablePanels } from "@/components/ResizablePanels";
 import type { ChatRequest } from "./api/chat/route";
 import { Terminal } from "lucide-react";
@@ -14,6 +13,19 @@ import { ModeToggle } from "@/components/mode-toggle";
 import { parseProjectOutput, type ProjectOutput } from "@/lib/project-types";
 import { detectLanguage } from "@/lib/language-detection";
 import { checkCodeQuality, formatQualityReport } from "@/lib/code-quality-check";
+import type { WorkspaceState } from "@/lib/workspace";
+import {
+  createCheckpoint,
+  workspaceFromProjectOutput,
+  workspaceFromSingleFile,
+} from "@/lib/workspace";
+import {
+  clearWorkspace as clearWorkspaceStorage,
+  loadWorkspace,
+  saveWorkspace,
+} from "@/lib/workspace-storage";
+import { unifiedDiffForFiles } from "@/lib/diff";
+import { downloadProjectAsZip, downloadTextFile } from "@/lib/download";
 
 interface ChatMessage {
   role: string;
@@ -33,6 +45,10 @@ export default function Home() {
   const [outputFormat, setOutputFormat] = useState<OutputFormat>("React"); // Track current language (for future UI display)
   const [inputStatus, setInputStatus] = useState<"ready" | "submitting" | "streaming" | "error">("ready");
   const [sessionCost, setSessionCost] = useState<{ cost: string; tokens: string } | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
+  const [draftWorkspace, setDraftWorkspace] = useState<WorkspaceState | null>(null);
+  const [agentMode, setAgentMode] = useState<"agent" | "ask">("agent");
+  const [webSearch, setWebSearch] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -42,6 +58,41 @@ export default function Home() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Load persisted workspace on first mount
+  useEffect(() => {
+    loadWorkspace()
+      .then((ws) => {
+        if (ws) setWorkspace(ws);
+      })
+      .catch(() => {});
+  }, []);
+
+  // Persist workspace (debounced)
+  useEffect(() => {
+    if (!workspace) return;
+    const t = setTimeout(() => {
+      saveWorkspace(workspace).catch(() => {});
+    }, 250);
+    return () => clearTimeout(t);
+  }, [workspace]);
+
+  // Keep a read-only draft workspace while streaming before first commit
+  useEffect(() => {
+    if (workspace) {
+      setDraftWorkspace(null);
+      return;
+    }
+    if (projectOutput?.type === "project") {
+      setDraftWorkspace(workspaceFromProjectOutput(projectOutput));
+      return;
+    }
+    if (componentCode) {
+      setDraftWorkspace(workspaceFromSingleFile(componentCode, outputFormat));
+      return;
+    }
+    setDraftWorkspace(null);
+  }, [workspace, projectOutput, componentCode, outputFormat]);
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
@@ -60,11 +111,27 @@ export default function Home() {
     const assistantIndex = messages.length + 1;
     setMessages((prev) => [...prev, { role: "assistant", content: "", reasoning: "" }]);
 
+    // Safety: checkpoint current workspace before generation overwrite (Agent mode)
+    if (agentMode === "agent" && workspace) {
+      setWorkspace((prev) => {
+        if (!prev) return prev;
+        const label = `Before generation (${new Date().toLocaleString()})`;
+        const cp = createCheckpoint(prev, label);
+        return {
+          ...prev,
+          checkpoints: [cp, ...prev.checkpoints].slice(0, 25),
+          updatedAt: Date.now(),
+        };
+      });
+    }
+
     try {
       const chatRequest: ChatRequest = {
         message,
         chatId,
         outputFormat: detectedLanguage, // Use detected language directly, not state
+        mode: agentMode,
+        webSearch,
       };
 
       const response = await fetch("/api/chat", {
@@ -152,15 +219,29 @@ export default function Home() {
                 if (!chatId) {
                   setChatId(data.chatId);
                 }
-                setComponentCode(data.code);
-                
-                // Parse the response to detect project mode
-                const parsed = parseProjectOutput(data.code);
-                setProjectOutput(parsed);
+                const hasCode = typeof data.code === "string" && data.code.trim().length > 0;
+                if (hasCode) {
+                  setComponentCode(data.code);
+
+                  // Parse the response to detect project mode
+                  const parsed = parseProjectOutput(data.code);
+                  setProjectOutput(parsed);
+
+                  // Commit to workspace in Agent mode
+                  if (agentMode === "agent") {
+                    setWorkspace((prev) => {
+                      const next = workspaceFromProjectOutput(parsed);
+                      if (prev?.checkpoints?.length) {
+                        next.checkpoints = prev.checkpoints;
+                      }
+                      return next;
+                    });
+                  }
+                }
 
                 // Run quality check (development mode only)
                 if (process.env.NODE_ENV === 'development') {
-                  const qualityResult = checkCodeQuality(data.code, detectedLanguage);
+                  const qualityResult = checkCodeQuality(data.code || "", detectedLanguage);
                   console.log('=== Code Quality Check ===');
                   console.log(formatQualityReport(qualityResult));
 
@@ -177,7 +258,12 @@ export default function Home() {
                   });
                 }
 
-                toast.success(parsed.type === "project" ? "Project generated!" : "Component generated!");
+                if (agentMode === "ask" || !hasCode) {
+                  toast.success("Answer ready!");
+                } else {
+                  const parsed = parseProjectOutput(data.code);
+                  toast.success(parsed.type === "project" ? "Project generated!" : "Component generated!");
+                }
               } else if (data.type === "error") {
                 throw new Error(data.error);
               }
@@ -203,6 +289,9 @@ export default function Home() {
     }
   };
 
+  const displayWorkspace = workspace || draftWorkspace;
+  const displayReadOnly = !workspace;
+
   return (
     <main className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
       {/* Header */}
@@ -221,6 +310,35 @@ export default function Home() {
               <span>{sessionCost.tokens} · {sessionCost.cost}</span>
             </div>
           )}
+          <div className="hidden lg:flex items-center gap-2 px-2 py-1 bg-muted/50 rounded-full text-xs font-medium">
+            <button
+              onClick={() => setAgentMode("ask")}
+              className={`px-3 py-1 rounded-full transition-colors ${
+                agentMode === "ask" ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Ask mode (no workspace changes)"
+            >
+              Ask
+            </button>
+            <button
+              onClick={() => setAgentMode("agent")}
+              className={`px-3 py-1 rounded-full transition-colors ${
+                agentMode === "agent" ? "bg-background text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+              title="Agent mode (updates workspace)"
+            >
+              Agent
+            </button>
+          </div>
+          <label className="hidden lg:flex items-center gap-2 px-3 py-1 bg-muted/50 rounded-full text-xs font-medium text-muted-foreground cursor-pointer">
+            <input
+              type="checkbox"
+              checked={webSearch}
+              onChange={(e) => setWebSearch(e.target.checked)}
+              className="accent-primary"
+            />
+            Web search
+          </label>
           <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-muted/50 rounded-full text-xs font-medium text-muted-foreground">
             <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
             {outputFormat}
@@ -260,7 +378,7 @@ export default function Home() {
               className="h-full flex flex-col bg-muted/30 p-4"
             >
               <div className="flex-1 rounded-xl border border-border/40 bg-background shadow-sm overflow-hidden relative">
-                {!componentCode && !isLoading && messages.length === 0 ? (
+                {!displayWorkspace && !isLoading && messages.length === 0 ? (
                   <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40 pointer-events-none">
                     <div className="text-center space-y-4">
                       <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
@@ -270,15 +388,115 @@ export default function Home() {
                     </div>
                   </div>
                 ) : null}
-                {projectOutput?.type === "project" ? (
-                  <ProjectPreviewPanel
-                    files={projectOutput.files}
-                    projectName={projectOutput.name}
-                    isStreaming={isLoading}
-                  />
-                ) : (
-                  <PreviewPanel componentCode={componentCode} isStreaming={isLoading} />
-                )}
+                <WorkspacePanel
+                  workspace={displayWorkspace}
+                  readOnly={displayReadOnly}
+                  isStreaming={isLoading}
+                  onSelectPath={(path) => {
+                    if (workspace) {
+                      setWorkspace((prev) => (prev ? { ...prev, activePath: path } : prev));
+                    } else {
+                      setDraftWorkspace((prev) => (prev ? { ...prev, activePath: path } : prev));
+                    }
+                  }}
+                  onUpdateFile={(path, content) => {
+                    setWorkspace((prev) => {
+                      if (!prev) return prev;
+                      return {
+                        ...prev,
+                        files: { ...prev.files, [path]: content },
+                        updatedAt: Date.now(),
+                      };
+                    });
+                  }}
+                  onResetWorkspace={async () => {
+                    await clearWorkspaceStorage();
+                    setWorkspace(null);
+                    setDraftWorkspace(null);
+                    setComponentCode("");
+                    setProjectOutput(null);
+                    toast.success("Workspace reset");
+                  }}
+                  onRevertFile={(path) => {
+                    setWorkspace((prev) => {
+                      if (!prev?.baseFiles) return prev;
+                      return {
+                        ...prev,
+                        files: { ...prev.files, [path]: prev.baseFiles[path] ?? "" },
+                        updatedAt: Date.now(),
+                      };
+                    });
+                    toast.success(`Reverted ${path}`);
+                  }}
+                  onRevertAll={() => {
+                    setWorkspace((prev) => {
+                      if (!prev?.baseFiles) return prev;
+                      return {
+                        ...prev,
+                        files: { ...prev.baseFiles },
+                        updatedAt: Date.now(),
+                      };
+                    });
+                    toast.success("Reverted all files");
+                  }}
+                  onCreateCheckpoint={() => {
+                    setWorkspace((prev) => {
+                      if (!prev) return prev;
+                      const label =
+                        window.prompt("Checkpoint name", `Checkpoint (${new Date().toLocaleString()})`) ||
+                        `Checkpoint (${new Date().toLocaleString()})`;
+                      const cp = createCheckpoint(prev, label);
+                      return {
+                        ...prev,
+                        checkpoints: [cp, ...prev.checkpoints].slice(0, 25),
+                        updatedAt: Date.now(),
+                      };
+                    });
+                    toast.success("Checkpoint saved");
+                  }}
+                  onRestoreCheckpoint={(checkpointId) => {
+                    setWorkspace((prev) => {
+                      if (!prev) return prev;
+                      const cp = prev.checkpoints.find((c) => c.id === checkpointId);
+                      if (!cp) return prev;
+                      return {
+                        ...prev,
+                        files: { ...cp.files },
+                        activePath: cp.activePath,
+                        updatedAt: Date.now(),
+                      };
+                    });
+                    toast.success("Checkpoint restored");
+                  }}
+                  onDownloadZip={async () => {
+                    if (!displayWorkspace) return;
+                    const filesList = Object.entries(displayWorkspace.files).map(([path, content]) => ({
+                      path,
+                      content,
+                    }));
+                    try {
+                      await downloadProjectAsZip(filesList, displayWorkspace.projectName || "workspace");
+                      toast.success("Downloaded ZIP");
+                    } catch (e) {
+                      console.error(e);
+                      toast.error("Failed to download ZIP");
+                    }
+                  }}
+                  onDownloadPatch={() => {
+                    if (!workspace?.baseFiles) {
+                      toast.error("No base snapshot to diff against yet");
+                      return;
+                    }
+                    const patch = unifiedDiffForFiles(workspace.baseFiles, workspace.files);
+                    if (!patch.trim()) {
+                      toast.message("No changes to export");
+                      return;
+                    }
+                    const name = `${workspace.projectName || "workspace"}.patch`;
+                    downloadTextFile(patch, name, "text/x-diff;charset=utf-8");
+                    toast.success(`Downloaded ${name}`);
+                  }}
+                />
               </div>
             </motion.div>
           }

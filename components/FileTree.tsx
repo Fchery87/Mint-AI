@@ -41,14 +41,15 @@ function FileTreeNodeComponent({
   depth,
 }: FileTreeNodeComponentProps) {
   const [isOpen, setIsOpen] = useState(true);
-  const isSelected = node.path === selectedPath;
+  const nodeSelectedPath = node.type === "file" ? node.targetPath || node.path : node.path;
+  const isSelected = nodeSelectedPath === selectedPath;
   const isFolder = node.type === "folder";
 
   const handleClick = () => {
     if (isFolder) {
       setIsOpen(!isOpen);
     } else {
-      onSelectFile(node.path);
+      onSelectFile(node.targetPath || node.path);
     }
   };
 

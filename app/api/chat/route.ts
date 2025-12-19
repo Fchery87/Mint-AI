@@ -40,18 +40,69 @@ const chatRequestSchema = z.object({
     .max(5000, 'Message too long (max 5000 characters)'),
   chatId: z.string().optional(),
   outputFormat: z.string().optional(),
+  mode: z.enum(['agent', 'ask']).optional(),
+  webSearch: z.boolean().optional(),
 });
 
 export interface ChatRequest {
   message: string;
   chatId?: string;
   outputFormat?: OutputFormat;
+  mode?: 'agent' | 'ask';
+  webSearch?: boolean;
 }
 
 export interface ChatResponse {
   id: string;
   code: string;
   message: string;
+}
+
+async function getWebSearchContext(
+  query: string
+): Promise<{ context: string; sources: Array<{ title?: string; url: string }> } | null> {
+  const enabled = process.env.ENABLE_WEB_SEARCH === 'true';
+  const apiKey = process.env.EXA_API_KEY;
+  if (!enabled || !apiKey) return null;
+
+  const searchRes = await fetch('https://api.exa.ai/search', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+    },
+    body: JSON.stringify({
+      query,
+      numResults: 5,
+      type: 'neural',
+      useAutoprompt: true,
+    }),
+  });
+
+  if (!searchRes.ok) {
+    throw new Error(`Web search failed: ${searchRes.status} ${searchRes.statusText}`);
+  }
+
+  const data: any = await searchRes.json();
+  const results = Array.isArray(data?.results) ? data.results : [];
+  const sources = results
+    .map((r: any) => ({
+      title: typeof r?.title === 'string' ? r.title : undefined,
+      url: typeof r?.url === 'string' ? r.url : '',
+    }))
+    .filter((r: any) => r.url);
+
+  const contextLines = sources.map((s: any, idx: number) => {
+    const title = s.title ? s.title.replace(/\s+/g, ' ').trim() : 'Untitled';
+    return `[${idx + 1}] ${title} — ${s.url}`;
+  });
+
+  return {
+    context:
+      `Web search results (use as up-to-date references; cite URLs when relevant):\n` +
+      contextLines.join('\n'),
+    sources,
+  };
 }
 
 // Simple in-memory chat history storage
@@ -133,7 +184,46 @@ function extractCodeFromResponse(
     code: match[2] || '',
   }));
 
-  if (blocks.length === 0) return text.trim();
+  if (blocks.length === 0) {
+    // Heuristic fallback: some models omit fenced code blocks.
+    // Try to extract a "code-looking" region instead of returning the full response.
+    const withoutReasoningTags = text.replace(
+      /<reasoning>[\s\S]*?<\/reasoning>/gi,
+      ''
+    );
+    const lines = withoutReasoningTags.split('\n');
+
+    const fmt = (outputFormat || '').toLowerCase();
+    const preferPython = fmt.includes('python') || fmt === 'py';
+    const preferHtml = fmt === 'html' || fmt.includes('html');
+
+    const pythonStart = (line: string) =>
+      /^\s*(import\s+\w+|from\s+\w+\s+import\s+|def\s+\w+\s*\(|class\s+\w+\s*[:(]|if\s+__name__\s*==\s*['"]__main__['"]\s*:)/.test(
+        line
+      );
+    const htmlStart = (line: string) =>
+      /^\s*(<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>])/i.test(line);
+
+    let startIdx = -1;
+    if (preferPython) {
+      startIdx = lines.findIndex((l) => pythonStart(l) || l.includes('import pygame'));
+    } else if (preferHtml) {
+      startIdx = lines.findIndex((l) => htmlStart(l));
+    }
+
+    // Generic fallback: first "import"/"export"/"def"/"class" line.
+    if (startIdx === -1) {
+      startIdx = lines.findIndex((l) =>
+        /^\s*(import\s+|export\s+|def\s+|class\s+)/.test(l)
+      );
+    }
+
+    if (startIdx !== -1) {
+      return lines.slice(startIdx).join('\n').trim();
+    }
+
+    return withoutReasoningTags.trim();
+  }
 
   const preferredLangs =
     outputFormat === 'html'
@@ -191,6 +281,8 @@ export async function POST(req: NextRequest): Promise<Response> {
     const { message, chatId } = validationResult.data;
     const outputFormat: OutputFormat =
       validationResult.data.outputFormat || 'React';
+    const mode: 'agent' | 'ask' = validationResult.data.mode || 'agent';
+    const webSearchRequested: boolean = Boolean(validationResult.data.webSearch);
 
     // Get or create chat history
     const currentChatId = chatId || generateChatId();
@@ -204,12 +296,31 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     // Get the active provider and client
     const { client, provider } = getOpenAIClient();
-    const systemPrompt = getSystemPrompt(outputFormat);
+    const systemPrompt = getSystemPrompt(outputFormat, { mode });
+
+    let webSearchContext: string | null = null;
+    let webSearchSources: Array<{ title?: string; url: string }> | null = null;
+    if (webSearchRequested) {
+      try {
+        const search = await getWebSearchContext(message);
+        webSearchContext = search?.context || null;
+        webSearchSources = search?.sources || null;
+      } catch (e) {
+        Sentry.captureException(e, {
+          tags: { source: 'web-search' },
+          extra: { provider: provider.name },
+        });
+      }
+    }
 
     // Call LLM API with streaming (include usage data)
     const stream = await client.chat.completions.create({
       model: provider.model,
-      messages: [{ role: 'system', content: systemPrompt }, ...history],
+      messages: [
+        { role: 'system', content: systemPrompt },
+        ...(webSearchContext ? [{ role: 'system', content: webSearchContext } as const] : []),
+        ...history,
+      ],
       max_tokens: 4096,
       stream: true,
       temperature: 0.2,
@@ -407,7 +518,8 @@ export async function POST(req: NextRequest): Promise<Response> {
           chatHistories.set(currentChatId, history);
 
           // Extract code from the response
-          const code = extractCodeFromResponse(fullResponse, outputFormat);
+          const code =
+            mode === 'ask' ? '' : extractCodeFromResponse(fullResponse, outputFormat);
 
           // Track usage and calculate cost
           let costData = null;
@@ -436,6 +548,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             code,
             explanation: explanationBuffer,
             usage: costData,
+            sources: webSearchSources,
           });
           controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
           controller.close();

@@ -7,7 +7,7 @@
     "dev": "bun --bun next dev",
     "build": "bun --bun next build",
     "start": "bun --bun next start",
-    "lint": "bun --bun next lint",
+    "lint": "bun run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

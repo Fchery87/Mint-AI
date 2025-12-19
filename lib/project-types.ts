@@ -2,6 +2,8 @@
  * Types for multi-file project support
  */
 
+import { getExtensionForLanguage } from './preview-support';
+
 export interface ProjectFile {
   path: string; // e.g., "src/app/page.tsx"
   content: string;
@@ -89,13 +91,25 @@ export function parseProjectOutput(response: string): ProjectOutput {
   const codeMatch = response.match(codePattern);
 
   if (codeMatch) {
-    const language = codeMatch[1] || 'tsx';
+    const rawLanguage = (codeMatch[1] || '').toLowerCase();
     const content = codeMatch[2].trim();
+    const inferredLanguage = inferLanguageFromContent(content);
+
+    // Prefer the explicit fence language, but correct common cases where
+    // "typescript" blocks actually contain JSX (tsx).
+    const language =
+      rawLanguage === 'typescript' && inferredLanguage === 'tsx'
+        ? 'tsx'
+        : rawLanguage || inferredLanguage || 'plaintext';
+
+    const ext = getExtensionForLanguage(language);
+    const path = inferDefaultPathFromLanguage(language, ext);
+
     return {
       type: 'single',
       files: [
         {
-          path: `Component.${language === 'typescript' ? 'tsx' : language}`,
+          path,
           content,
           language,
         },
@@ -103,17 +117,70 @@ export function parseProjectOutput(response: string): ProjectOutput {
     };
   }
 
-  // Fallback: return raw response as single file
+  // Fallback: infer language from content for better UX
+  const inferredLanguage = inferLanguageFromContent(response);
+  const inferredPath = inferDefaultPathFromLanguage(inferredLanguage);
+
   return {
     type: 'single',
     files: [
       {
-        path: 'output.txt',
-        content: response,
-        language: 'plaintext',
+        path: inferredPath,
+        content: response.trim(),
+        language: inferredLanguage,
       },
     ],
   };
+}
+
+function inferLanguageFromContent(content: string): string {
+  const text = content.replace(/\r\n/g, '\n');
+
+  // Python
+  if (
+    /(^|\n)\s*(import\s+\w+|from\s+\w+\s+import\s+)/.test(text) ||
+    /(^|\n)\s*(def\s+\w+\s*\(|class\s+\w+\s*[:(])/.test(text)
+  ) {
+    return 'python';
+  }
+
+  // HTML
+  if (/(<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>])/i.test(text)) {
+    return 'html';
+  }
+
+  // React/TSX-ish
+  if (
+    /(import\s+React\b|from\s+['"]react['"]|export\s+default\s+function|return\s*\(<)/.test(
+      text
+    )
+  ) {
+    return 'tsx';
+  }
+
+  // JS/TS
+  if (/(export\s+default|export\s+function|const\s+\w+\s*=|function\s+\w+\s*\()/.test(text)) {
+    return 'javascript';
+  }
+
+  return 'plaintext';
+}
+
+function inferDefaultPathFromLanguage(language: string, ext?: string): string {
+  const resolvedExt = ext || getExtensionForLanguage(language);
+
+  switch (language) {
+    case 'python':
+      return 'main.py';
+    case 'html':
+      return 'index.html';
+    case 'tsx':
+      return 'Component.tsx';
+    case 'javascript':
+      return 'index.js';
+    default:
+      return `output.${resolvedExt || 'txt'}`;
+  }
 }
 
 /**
@@ -125,13 +192,29 @@ export interface FileTreeNode {
   type: 'file' | 'folder';
   children?: FileTreeNode[];
   language?: string;
+  targetPath?: string; // original file path when using virtual grouping
 }
 
 export function buildFileTree(files: ProjectFile[]): FileTreeNode[] {
   const root: FileTreeNode[] = [];
 
+  const isFlat =
+    files.length > 1 && files.every((f) => !f.path.includes('/'));
+
+  const getVirtualGroup = (file: ProjectFile): string => {
+    const ext = file.path.split('.').pop()?.toLowerCase() || '';
+    if (['js', 'jsx', 'ts', 'tsx'].includes(ext)) return 'src';
+    if (['py'].includes(ext)) return 'src';
+    if (['css', 'scss'].includes(ext)) return 'styles';
+    if (['html', 'htm'].includes(ext)) return 'public';
+    if (['json', 'yaml', 'yml', 'toml'].includes(ext)) return 'config';
+    if (['md'].includes(ext)) return 'docs';
+    return 'other';
+  };
+
   for (const file of files) {
-    const parts = file.path.split('/');
+    const virtualPath = isFlat ? `${getVirtualGroup(file)}/${file.path}` : file.path;
+    const parts = virtualPath.split('/');
     let current = root;
     let currentPath = '';
 
@@ -148,6 +231,7 @@ export function buildFileTree(files: ProjectFile[]): FileTreeNode[] {
           path: currentPath,
           type: isFile ? 'file' : 'folder',
           language: isFile ? file.language : undefined,
+          targetPath: isFile && isFlat ? file.path : undefined,
           children: isFile ? undefined : [],
         };
         current.push(node);

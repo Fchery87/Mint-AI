@@ -120,6 +120,24 @@ export async function downloadProjectAsZip(
   URL.revokeObjectURL(url);
 }
 
+export function downloadTextFile(
+  text: string,
+  filename: string,
+  mimeType = 'text/plain;charset=utf-8'
+): void {
+  const blob = new Blob([text], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
+
 /**
  * Download component with dependencies as a ZIP (legacy - use downloadProjectAsZip)
  */
