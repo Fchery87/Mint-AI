@@ -52,6 +52,7 @@ export function ReasoningBlock({ content, isStreaming = false, className }: Reas
 
   // Memoize parsing to avoid re-parsing on every render
   const parsed = useMemo(() => parseReasoning(content), [content]);
+  const isStructured = Boolean(parsed.problem || parsed.approach);
 
   // Auto-expand when streaming, collapse when done
   useEffect(() => {
@@ -70,9 +71,6 @@ export function ReasoningBlock({ content, isStreaming = false, className }: Reas
   }, [isStreaming, content]);
 
   if (!content.trim()) return null;
-
-  // Determine if we have structured reasoning
-  const isStructured = useMemo(() => Boolean(parsed.problem || parsed.approach), [parsed.problem, parsed.approach]);
 
   return (
     <motion.div
