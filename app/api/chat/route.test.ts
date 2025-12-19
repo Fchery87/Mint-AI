@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { splitReasoningAtTerminator } from './route';
+import { splitReasoningAtTerminator, splitReasoningForStreaming } from './route';
 
 describe('splitReasoningAtTerminator', () => {
   test('splits on explicit </reasoning> and consumes the tag', () => {
@@ -25,3 +25,11 @@ describe('splitReasoningAtTerminator', () => {
   });
 });
 
+describe('splitReasoningForStreaming', () => {
+  test('holds back partial </reasoning> so it can be detected next chunk', () => {
+    const buffer = `${'a'.repeat(50)}</reas`;
+    const result = splitReasoningForStreaming(buffer, 30);
+    expect(result.chunk.includes('</reas')).toBe(false);
+    expect(result.rest.endsWith('</reas')).toBe(true);
+  });
+});

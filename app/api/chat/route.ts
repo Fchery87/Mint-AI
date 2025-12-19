@@ -94,6 +94,22 @@ export function splitReasoningAtTerminator(buffer: string): {
   return { reasoningContent: '', rest: buffer, terminated: false };
 }
 
+export function splitReasoningForStreaming(
+  buffer: string,
+  minChunkSize = 30
+): { chunk: string; rest: string } {
+  const endTag = '</reasoning>';
+  const holdback = endTag.length - 1;
+  const shouldFlush = buffer.includes('\n') || buffer.length >= minChunkSize + holdback;
+
+  if (!shouldFlush || buffer.length <= holdback) {
+    return { chunk: '', rest: buffer };
+  }
+
+  const safeLen = buffer.length - holdback;
+  return { chunk: buffer.slice(0, safeLen), rest: buffer.slice(safeLen) };
+}
+
 function extractCodeFromResponse(
   text: string,
   outputFormat: OutputFormat
@@ -283,16 +299,19 @@ export async function POST(req: NextRequest): Promise<Response> {
 
                 // If in reasoning, accumulate and stream immediately for real-time feel
                 if (inReasoning) {
-                  // Stream reasoning content immediately (smaller chunks = smoother streaming)
-                  if (buffer.length > 5 || buffer.includes('\n')) {
-                    reasoningBuffer += buffer;
+                  // Stream reasoning content while holding back enough characters to avoid
+                  // leaking partial terminators (e.g. </reasoning> split across chunks).
+                  const flushed = splitReasoningForStreaming(buffer);
+                  if (flushed.chunk) {
+                    reasoningBuffer += flushed.chunk;
                     const data = JSON.stringify({
                       type: 'reasoning-chunk',
-                      content: buffer,
+                      content: flushed.chunk,
                       chatId: currentChatId,
                     });
                     controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-                    buffer = '';
+                    buffer = flushed.rest;
+                    continue;
                   }
                   break;
                 }

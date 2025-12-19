@@ -1,33 +1,31 @@
 # Plan
-**Problem:** The chat stream can include fenced code blocks inside `<reasoning>...</reasoning>`, causing the Reasoning UI to display code when it should be reasoning-only text.  
-**Goal (Definition of Done):** When the model outputs a ``` fenced block before `</reasoning>`, the server stops reasoning at the fence and the client never receives that fenced block via `reasoning-chunk` SSE events.  
-**Scope:** Fix reasoning stream parsing in `app/api/chat/route.ts` | **Out of scope:** Prompt tuning/model behavior changes; UI redesign of the reasoning panel.  
-**Risks/Impact:** Streaming parser edge cases (tags split across chunks); ensure no infinite loops or lost explanation/code content.  
-**Rollback:** Revert the changes in `app/api/chat/route.ts` to restore previous streaming behavior.  
+**Problem:** The Reasoning UI streams into a single block, but you want each reasoning section to appear as its own “bubble” in order (Thinking → Problem → Approach → Key Decisions → Scope → Complexity Check) as the model streams.  
+**Goal (Definition of Done):** While reasoning is streaming, each section renders as its own sequential mini-bubble (only showing once it has content) and updates in real time without mixing sections.  
+**Scope:** UI-only change to `components/ReasoningBlock.tsx` (parsing + rendering) | **Out of scope:** Server/SSE changes; splitting reasoning into separate chat messages; prompt changes.  
+**Risks/Impact:** Models may not follow the exact “- **Section**:” format; ensure fallback rendering still works.  
+**Rollback:** Revert `components/ReasoningBlock.tsx` changes to restore the single-block reasoning UI.  
 
 ## TODO
-- [x] Reproduce bug / failing test
-- [x] Identify root cause in `app/api/chat/route.ts`
-- [x] Implement minimal fix
-- [x] Add/adjust targeted tests
-- [x] Run type / build / unit checks
-- [x] Verify acceptance criteria
+- [ ] Confirm desired UI behavior (mini-bubbles vs separate messages)
+- [ ] Update reasoning parser to split sections incrementally
+- [ ] Render ordered mini-bubbles with streaming updates
+- [ ] Add/adjust targeted tests (if applicable)
+- [ ] Run type / build checks
+- [ ] Verify acceptance criteria
 - [ ] Prepare PR with summary + rollback steps
 
 ## High-Level Updates
-- 2025-12-18 – Planned to end reasoning at the first fenced code block to prevent code from appearing in the Reasoning UI (reason: models occasionally place code before closing `</reasoning>`).
-- 2025-12-18 – Updated the stream parser to treat ``` inside `<reasoning>` as an early terminator and emit `reasoning-complete` (reason: prevent fenced code from being streamed as reasoning).
-- 2025-12-18 – Added a small unit test for the reasoning terminator split logic (reason: lock in behavior for the regression).
-- 2025-12-18 – Verified with `bun test`, `bun typecheck`, and `bun --bun next build` (reason: ensure no regressions from parser change).
+- 2025-12-19 – Planned UI change to stream reasoning sections as sequential mini-bubbles (reason: match common AI coding platform UX).
 
 ## Review
 **Summary:**  
-- Updated `app/api/chat/route.ts` to terminate reasoning on the first ``` fence (in addition to `</reasoning>`).
-- Added `app/api/chat/route.test.ts` to cover the terminator parsing behavior.
+- TBD
 
 **Trade-offs:**  
-- Treating ``` inside reasoning as an implicit terminator may truncate any post-fence “reasoning” text, but prevents code leakage into the reasoning UI.
-- `bun lint` currently fails because this Next.js CLI build has no `lint` subcommand and ESLint isn’t installed.
+- TBD
 
 **Follow-ups:**  
-- None.
+- TBD
+
+## Previous Work (Completed)
+- 2025-12-18 – Fixed reasoning/code leakage by terminating reasoning at ``` fences and preventing partial `</reasoning>` leaks; added `app/api/chat/route.test.ts`.
