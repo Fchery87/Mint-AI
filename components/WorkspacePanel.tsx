@@ -122,11 +122,92 @@ export default function WorkspacePanel({
 
   const isPython = activeLanguage === "python";
   const canPreview = isPreviewable(activeLanguage);
+  const isReactSingle = ["tsx", "jsx"].includes(activeLanguage);
+  const isJsTsSingle = ["javascript", "js", "typescript", "ts"].includes(activeLanguage);
+  const isHtmlSingle = ["html", "htm"].includes(activeLanguage);
+  const isCssSingle = ["css", "scss"].includes(activeLanguage);
   const canSandpack =
-    workspace?.mode === "project" &&
-    workspaceToProjectFiles(files).some((f) =>
-      ["tsx", "jsx", "typescript", "javascript"].includes(f.language)
-    );
+    (workspace?.mode === "project" &&
+      workspaceToProjectFiles(files).some((f) =>
+        ["tsx", "jsx", "typescript", "javascript"].includes(f.language)
+      )) ||
+    (workspace?.mode === "single" &&
+      (isReactSingle || isJsTsSingle || isHtmlSingle || isCssSingle));
+
+  const buildHtmlDocument = (body: string, includeScript: boolean) => {
+    const trimmed = body.trim();
+    if (trimmed.includes("<html") || trimmed.includes("<!doctype")) {
+      return trimmed;
+    }
+    return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sandbox</title>
+  </head>
+  <body>
+    ${trimmed || '<div id="app"></div>'}
+    ${includeScript ? '<script type="module" src="/index.js"></script>' : ''}
+  </body>
+</html>`;
+  };
+
+  const singleSandpackFiles = useMemo(() => {
+    if (!workspace || workspace.mode !== "single") return null;
+    if (isReactSingle) {
+      return [{ path: activePath, content: activeContent, language: activeLanguage }];
+    }
+    if (isJsTsSingle) {
+      const ext = activeLanguage === "typescript" || activeLanguage === "ts" ? "ts" : "js";
+      const html = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sandbox</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/index.${ext}"></script>
+  </body>
+</html>`;
+
+      return [
+        { path: "index.html", content: html, language: "html" },
+        { path: `index.${ext}`, content: activeContent, language: activeLanguage },
+      ];
+    }
+    if (isHtmlSingle) {
+      const html = buildHtmlDocument(activeContent, true);
+      return [
+        { path: "index.html", content: html, language: "html" },
+        { path: "index.js", content: "// Entry point for Sandpack", language: "javascript" },
+      ];
+    }
+    if (isCssSingle) {
+      const html = buildHtmlDocument('<div id="app"></div>', true);
+      return [
+        { path: "index.html", content: html, language: "html" },
+        { path: "styles.css", content: activeContent, language: "css" },
+        {
+          path: "index.js",
+          content: "import './styles.css';\n",
+          language: "javascript",
+        },
+      ];
+    }
+    return null;
+  }, [
+    workspace,
+    activePath,
+    activeContent,
+    activeLanguage,
+    isReactSingle,
+    isJsTsSingle,
+    isHtmlSingle,
+    isCssSingle,
+  ]);
 
   const topBar = (
     <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 bg-muted/30">
@@ -494,15 +575,20 @@ export default function WorkspacePanel({
                   <PyodideExecutor code={activeContent} className="h-full" />
                 ) : canSandpack ? (
                   <div className="h-full">
-                    <SandpackRunner files={workspaceToProjectFiles(files)} />
+                    <SandpackRunner
+                      files={
+                        workspace?.mode === "single" && singleSandpackFiles
+                          ? singleSandpackFiles
+                          : workspaceToProjectFiles(files)
+                      }
+                    />
                   </div>
                 ) : (
                   <div className="h-full flex items-center justify-center text-muted-foreground/60">
                     <div className="text-center space-y-2 px-6">
                       <p className="text-sm font-medium">Run not available</p>
                       <p className="text-xs">
-                        Python runs via Pyodide, and JS/TS projects run via
-                        Sandpack.
+                        Python runs via Pyodide, and React/JS/TS/HTML/CSS runs via Sandpack.
                       </p>
                     </div>
                   </div>

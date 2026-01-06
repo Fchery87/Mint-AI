@@ -22,6 +22,10 @@ export function projectFilesToSandpack(files: ProjectFile[]): SandpackConfig {
   const hasTypeScript = files.some(
     (f) => f.path.endsWith('.tsx') || f.path.endsWith('.ts')
   );
+  const hasCss = files.some((f) => f.path.endsWith('.css') || f.path.endsWith('.scss'));
+  const scriptFiles = files.filter(
+    (f) => f.path.endsWith('.js') || f.path.endsWith('.ts')
+  );
   const hasReact = files.some(
     (f) =>
       f.content.includes('import React') ||
@@ -74,6 +78,51 @@ export function projectFilesToSandpack(files: ProjectFile[]): SandpackConfig {
     if (componentFile) {
       const entryPath = hasTypeScript ? '/App.tsx' : '/App.jsx';
       sandpackFiles[entryPath] = { code: componentFile.content };
+    }
+  }
+
+  if (template === 'vanilla' || template === 'vanilla-ts') {
+    if (!sandpackFiles['/index.html']) {
+      const existingHtml = files.find(
+        (f) => f.path.endsWith('.html') || f.path.endsWith('.htm')
+      );
+      const html = existingHtml
+        ? existingHtml.content
+        : `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sandbox</title>
+    ${hasCss ? '<link rel="stylesheet" href="/styles.css" />' : ''}
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/index.${
+      template === 'vanilla-ts' ? 'ts' : 'js'
+    }"></script>
+  </body>
+</html>`;
+      sandpackFiles['/index.html'] = { code: html };
+    }
+
+    const entryPath = template === 'vanilla-ts' ? '/index.ts' : '/index.js';
+    if (!sandpackFiles[entryPath]) {
+      const primaryScript = scriptFiles[0];
+      const importPath = primaryScript
+        ? `./${primaryScript.path.replace(/^\//, '')}`
+        : '';
+      const entryCode = importPath
+        ? `import '${importPath}';\n`
+        : '// Entry point for Sandpack\n';
+      sandpackFiles[entryPath] = { code: entryCode };
+    }
+
+    if (hasCss && !sandpackFiles['/styles.css']) {
+      const cssFile = files.find((f) => f.path.endsWith('.css'));
+      if (cssFile) {
+        sandpackFiles['/styles.css'] = { code: cssFile.content };
+      }
     }
   }
 
