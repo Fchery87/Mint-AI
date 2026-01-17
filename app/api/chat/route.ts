@@ -536,9 +536,10 @@ Each tag should be sent separately.`,
                       );
                     }
                     buffer = buffer.substring(idx + 3);
-                    // Skip language identifier or file path line if present
+                    // Check for language identifier or file path line
                     // Matches: tsx, typescript, file:package.json, file:app/page.tsx, etc.
                     const lineEnd = buffer.indexOf('\n');
+                    let fileMarker = '';
                     if (lineEnd !== -1) {
                       const firstLine = buffer.substring(0, lineEnd).trim();
                       // Match simple language (tsx) or file:path format
@@ -546,13 +547,21 @@ Each tag should be sent separately.`,
                         firstLine &&
                         /^(file:[^\s]+|[a-zA-Z0-9_+-]+)$/.test(firstLine)
                       ) {
+                        // IMPORTANT: Preserve file markers for parseProjectOutput to detect multiple files
+                        if (firstLine.startsWith('file:')) {
+                          fileMarker = '```' + firstLine + '\n';
+                        }
                         buffer = buffer.substring(lineEnd + 1);
                       }
                     }
+                    // Include the file marker in accumulated code for proper parsing
+                    accumulatedCode += fileMarker;
                     inCodeBlock = true;
                   } else {
                     // Ending code block - send as code-chunk event
                     accumulatedCode += before;
+                    // Add closing backticks to complete the file block for parsing
+                    accumulatedCode += '```\n';
                     controller.enqueue(
                       encoder.encode(
                         sseEvent('code-chunk', { content: before }),
