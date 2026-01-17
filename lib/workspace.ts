@@ -1,4 +1,8 @@
-import { getLanguageFromPath, type ProjectFile, type ProjectOutput } from './project-types';
+import {
+  getLanguageFromPath,
+  type ProjectFile,
+  type ProjectOutput,
+} from './project-types';
 import { getDefaultFilename } from './preview-support';
 
 export type WorkspaceFiles = Record<string, string>;
@@ -24,7 +28,33 @@ export interface WorkspaceState {
   updatedAt: number;
 }
 
-export function workspaceFromProjectOutput(output: ProjectOutput): WorkspaceState {
+export interface PendingChange {
+  path: string;
+  content: string;
+  language: string;
+  originalContent?: string;
+  status: 'new' | 'modified';
+}
+
+export function createPendingChange(
+  path: string,
+  content: string,
+  language: string,
+  workspace: WorkspaceState | null
+): PendingChange {
+  const originalContent = workspace?.files[path];
+  return {
+    path,
+    content,
+    language,
+    originalContent,
+    status: originalContent ? 'modified' : 'new',
+  };
+}
+
+export function workspaceFromProjectOutput(
+  output: ProjectOutput
+): WorkspaceState {
   const isProject = output.type === 'project';
   const files: WorkspaceFiles = {};
 

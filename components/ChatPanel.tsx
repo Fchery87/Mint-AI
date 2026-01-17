@@ -26,6 +26,7 @@ interface Message {
   content: string;
   reasoning?: string;
   isReasoningComplete?: boolean;
+  toolResults?: string; // Track tool execution feedback
 }
 
 interface ChatPanelProps {
@@ -121,6 +122,17 @@ export default function ChatPanel({
                     isStreaming={idx === messages.length - 1 && isReasoningStreaming}
                     className="w-full max-w-[85%]"
                   />
+                )}
+                
+                {/* Tool Results */}
+                {msg.role === "assistant" && msg.toolResults && (
+                  <div className="w-full max-w-[85%] bg-zinc-900/50 rounded-xl p-3 border border-zinc-500/10 font-mono text-[11px] text-zinc-400 mt-1">
+                    <div className="flex items-center gap-2 text-zinc-500 mb-2 border-b border-zinc-500/10 pb-1">
+                      <div className="w-2 h-2 rounded-full bg-zinc-600" />
+                      <span>Workspace Action Result</span>
+                    </div>
+                    <pre className="whitespace-pre-wrap">{msg.toolResults.trim()}</pre>
+                  </div>
                 )}
                 
                 {/* Message Content */}

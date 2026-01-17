@@ -75,7 +75,7 @@ const providers: Record<ProviderType, () => LLMProvider | null> = {
  */
 export function getActiveProvider(): LLMProvider {
   const providerName = (
-    process.env.LLM_PROVIDER || 'openrouter'
+    process.env.LLM_PROVIDER || 'zai'
   ).toLowerCase() as ProviderType;
 
   // Try the specified provider first
@@ -86,8 +86,8 @@ export function getActiveProvider(): LLMProvider {
 
   // Fallback: try each provider in order
   const fallbackOrder: ProviderType[] = [
-    'openrouter',
     'zai',
+    'openrouter',
     'openai',
     'custom',
   ];

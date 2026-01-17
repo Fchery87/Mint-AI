@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Code,
   Diff,
@@ -8,7 +8,6 @@ import {
   FileCode,
   FolderTree,
   MoreVertical,
-  Play,
   RotateCcw,
   Save,
   Trash2,
@@ -20,16 +19,14 @@ import type { WorkspaceState } from "@/lib/workspace";
 import { getLanguageForPath, workspaceToProjectFiles } from "@/lib/workspace";
 import { buildFileTree } from "@/lib/project-types";
 import FileTree from "@/components/FileTree";
-import LivePreview from "@/components/LivePreview";
+import { PreviewRouter } from "@/components/PreviewRouter";
 import { unifiedDiffForFile } from "@/lib/diff";
-import { isPreviewable } from "@/lib/preview-support";
-import { PyodideExecutor } from "@/components/execution/PyodideExecutor";
-import { SandpackRunner } from "@/components/execution/SandpackRunner";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
+import Editor from "@monaco-editor/react";
 
-type Tab = "preview" | "editor" | "diff" | "run";
+type Tab = "preview" | "editor" | "diff";
 
 interface WorkspacePanelProps {
   workspace: WorkspaceState | null;
@@ -64,13 +61,10 @@ export default function WorkspacePanel({
   const [actionsOpen, setActionsOpen] = useState(false);
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
-  const editorTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const editorHighlightScrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => setMounted(true), []);
 
-  // Streaming + live preview (iframe + Babel) is expensive; keep the UI responsive by
-  // switching to Editor while tokens stream, then users can Preview once finished.
+  // Switch to Editor while tokens stream, then users can Preview once finished
   useEffect(() => {
     if (isStreaming) setActiveTab("editor");
   }, [isStreaming]);
@@ -120,94 +114,11 @@ export default function WorkspacePanel({
     return unifiedDiffForFile(before, after, activePath);
   }, [workspace, baseFiles, files, activePath]);
 
-  const isPython = activeLanguage === "python";
-  const canPreview = isPreviewable(activeLanguage);
-  const isReactSingle = ["tsx", "jsx"].includes(activeLanguage);
-  const isJsTsSingle = ["javascript", "js", "typescript", "ts"].includes(activeLanguage);
-  const isHtmlSingle = ["html", "htm"].includes(activeLanguage);
-  const isCssSingle = ["css", "scss"].includes(activeLanguage);
-  const canSandpack =
-    (workspace?.mode === "project" &&
-      workspaceToProjectFiles(files).some((f) =>
-        ["tsx", "jsx", "typescript", "javascript"].includes(f.language)
-      )) ||
-    (workspace?.mode === "single" &&
-      (isReactSingle || isJsTsSingle || isHtmlSingle || isCssSingle));
-
-  const buildHtmlDocument = (body: string, includeScript: boolean) => {
-    const trimmed = body.trim();
-    if (trimmed.includes("<html") || trimmed.includes("<!doctype")) {
-      return trimmed;
-    }
-    return `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sandbox</title>
-  </head>
-  <body>
-    ${trimmed || '<div id="app"></div>'}
-    ${includeScript ? '<script type="module" src="/index.js"></script>' : ''}
-  </body>
-</html>`;
-  };
-
-  const singleSandpackFiles = useMemo(() => {
-    if (!workspace || workspace.mode !== "single") return null;
-    if (isReactSingle) {
-      return [{ path: activePath, content: activeContent, language: activeLanguage }];
-    }
-    if (isJsTsSingle) {
-      const ext = activeLanguage === "typescript" || activeLanguage === "ts" ? "ts" : "js";
-      const html = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Sandbox</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/index.${ext}"></script>
-  </body>
-</html>`;
-
-      return [
-        { path: "index.html", content: html, language: "html" },
-        { path: `index.${ext}`, content: activeContent, language: activeLanguage },
-      ];
-    }
-    if (isHtmlSingle) {
-      const html = buildHtmlDocument(activeContent, true);
-      return [
-        { path: "index.html", content: html, language: "html" },
-        { path: "index.js", content: "// Entry point for Sandpack", language: "javascript" },
-      ];
-    }
-    if (isCssSingle) {
-      const html = buildHtmlDocument('<div id="app"></div>', true);
-      return [
-        { path: "index.html", content: html, language: "html" },
-        { path: "styles.css", content: activeContent, language: "css" },
-        {
-          path: "index.js",
-          content: "import './styles.css';\n",
-          language: "javascript",
-        },
-      ];
-    }
-    return null;
-  }, [
-    workspace,
-    activePath,
-    activeContent,
-    activeLanguage,
-    isReactSingle,
-    isJsTsSingle,
-    isHtmlSingle,
-    isCssSingle,
-  ]);
+  // Get preview type for the workspace
+  const workspaceFiles = useMemo(() => {
+    if (!workspace) return [];
+    return workspaceToProjectFiles(files);
+  }, [workspace, files]);
 
   const topBar = (
     <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 bg-muted/30">
@@ -233,13 +144,6 @@ export default function WorkspacePanel({
             onClick={() => setActiveTab("diff")}
           >
             Diff
-          </TabButton>
-          <TabButton
-            icon={<Play size={14} />}
-            active={activeTab === "run"}
-            onClick={() => setActiveTab("run")}
-          >
-            Run
           </TabButton>
         </div>
 
@@ -411,8 +315,8 @@ export default function WorkspacePanel({
         )}
 
         <div className="flex-1 overflow-hidden flex flex-col bg-background">
-          {/* File header */}
-          {activePath && (
+          {/* File header for Editor mode */}
+          {activeTab === "editor" && activePath && (
             <div className="flex items-center gap-2 px-4 py-2 min-w-0 bg-[#f3f3f3] dark:bg-[#21252b] border-b border-border/20 dark:border-[#3e4451]/50">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-[#ff5f56]" />
@@ -450,81 +354,39 @@ export default function WorkspacePanel({
                     </p>
                   </div>
                 </div>
-              ) : canPreview ? (
-                <div className="h-full bg-background">
-                  <LivePreview code={activeContent} language={activeLanguage} />
-                </div>
               ) : (
-                <div className="h-full flex items-center justify-center text-muted-foreground/60">
-                  <div className="text-center space-y-2 px-6">
-                    <p className="text-sm font-medium">Preview not available</p>
-                    <p className="text-xs">
-                      Switch to Editor/Run to work with this file.
-                    </p>
-                  </div>
-                </div>
+                <PreviewRouter
+                  files={workspaceFiles}
+                  projectType={workspace.mode}
+                  projectName={workspace.projectName}
+                  activePath={activePath}
+                  onSelectPath={onSelectPath}
+                  readOnly={readOnly}
+                />
               )
             ) : activeTab === "editor" ? (
-              <div className="h-full p-4">
-                <div className="relative w-full h-full rounded-lg border border-border/40 bg-background/60 overflow-hidden">
-                  <div
-                    ref={editorHighlightScrollRef}
-                    className="absolute inset-0 overflow-auto pointer-events-none"
-                    style={{ padding: 12 }}
-                  >
-                    {mounted ? (
-                      <SyntaxHighlighter
-                        language={activeLanguage === "plaintext" ? "text" : activeLanguage}
-                        style={isDark ? oneDark : oneLight}
-                        customStyle={{
-                          margin: 0,
-                          padding: 0,
-                          background: "transparent",
-                          fontSize: "13px",
-                          lineHeight: "1.6",
-                        }}
-                        codeTagProps={{
-                          style: {
-                            fontFamily:
-                              "'Fira Code', 'JetBrains Mono', 'SF Mono', Consolas, monospace",
-                          },
-                        }}
-                        wrapLongLines={false}
-                      >
-                        {activeContent || " "}
-                      </SyntaxHighlighter>
-                    ) : (
-                      <pre className="text-foreground font-mono text-xs whitespace-pre">
-                        {activeContent || " "}
-                      </pre>
-                    )}
-                  </div>
-
-                  <textarea
-                    ref={editorTextareaRef}
-                    value={activeContent}
-                    onChange={(e) => onUpdateFile(activePath, e.target.value)}
-                    onScroll={(e) => {
-                      const el = e.currentTarget;
-                      if (editorHighlightScrollRef.current) {
-                        editorHighlightScrollRef.current.scrollTop = el.scrollTop;
-                        editorHighlightScrollRef.current.scrollLeft = el.scrollLeft;
-                      }
-                    }}
-                    disabled={readOnly || isStreaming}
-                    spellCheck={false}
-                    className={cn(
-                      "absolute inset-0 w-full h-full resize-none bg-transparent",
-                      "font-mono text-[13px] leading-[1.6] p-3",
-                      "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50",
-                      "text-transparent"
-                    )}
-                    style={{
-                      caretColor: isDark ? "#e5e7eb" : "#111827",
-                      WebkitTextFillColor: "transparent",
-                    }}
-                  />
-                </div>
+              <div className="h-full flex flex-col">
+                <Editor
+                  height="100%"
+                  language={activeLanguage}
+                  theme={isDark ? "vs-dark" : "light"}
+                  value={activeContent}
+                  onChange={(value) => onUpdateFile(activePath, value || "")}
+                  options={{
+                    readOnly: readOnly || isStreaming,
+                    minimap: { enabled: false },
+                    fontSize: 13,
+                    fontFamily: "'Fira Code', 'JetBrains Mono', 'SF Mono', Consolas, monospace",
+                    scrollBeyondLastLine: false,
+                    automaticLayout: true,
+                    padding: { top: 12, bottom: 12 },
+                  }}
+                  loading={
+                    <div className="flex items-center justify-center h-full text-muted-foreground/60 text-xs">
+                      Loading editor...
+                    </div>
+                  }
+                />
               </div>
             ) : activeTab === "diff" ? (
               <div className="min-h-full">
@@ -569,32 +431,7 @@ export default function WorkspacePanel({
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="h-full bg-background">
-                {isPython ? (
-                  <PyodideExecutor code={activeContent} className="h-full" />
-                ) : canSandpack ? (
-                  <div className="h-full">
-                    <SandpackRunner
-                      files={
-                        workspace?.mode === "single" && singleSandpackFiles
-                          ? singleSandpackFiles
-                          : workspaceToProjectFiles(files)
-                      }
-                    />
-                  </div>
-                ) : (
-                  <div className="h-full flex items-center justify-center text-muted-foreground/60">
-                    <div className="text-center space-y-2 px-6">
-                      <p className="text-sm font-medium">Run not available</p>
-                      <p className="text-xs">
-                        Python runs via Pyodide, and React/JS/TS/HTML/CSS runs via Sandpack.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

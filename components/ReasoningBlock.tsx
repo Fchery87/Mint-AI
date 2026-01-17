@@ -26,21 +26,27 @@ interface ParsedReasoning {
 function parseReasoning(content: string): ParsedReasoning {
   const parsed: ParsedReasoning = {};
 
-  // Try to extract structured sections
-  const problemMatch = content.match(/\*\*Problem\*\*:\s*(.+?)(?=\n|$)/i);
-  const approachMatch = content.match(/\*\*Approach\*\*:\s*(.+?)(?=\n\s*\*\*|$)/is);
-  const decisionsMatch = content.match(/\*\*Key Decisions\*\*:\s*(.+?)(?=\n\s*\*\*|$)/is);
-  const scopeMatch = content.match(/\*\*Scope\*\*:\s*(.+?)(?=\n\s*\*\*|$)/is);
-  const complexityMatch = content.match(/\*\*Complexity Check\*\*:\s*(.+?)(?=\n|$)/is);
+  // Try to extract structured sections using lookahead for the next header
+  const sections = [
+    { key: 'problem', pattern: /\*\*Problem\*\*:\s*(.+?)(?=\n\s*\*\*|$)/is },
+    { key: 'approach', pattern: /\*\*Approach\*\*:\s*(.+?)(?=\n\s*\*\*|$)/is },
+    { key: 'keyDecisions', pattern: /\*\*Key Decisions\*\*:\s*(.+?)(?=\n\s*\*\*|$)/is },
+    { key: 'scope', pattern: /\*\*Scope\*\*:\s*(.+?)(?=\n\s*\*\*|$)/is },
+    { key: 'complexityCheck', pattern: /\*\*Complexity Check\*\*:\s*(.+?)(?=\n\s*\*\*|$)/is },
+  ];
 
-  if (problemMatch) parsed.problem = problemMatch[1].trim();
-  if (approachMatch) parsed.approach = approachMatch[1].trim();
-  if (decisionsMatch) parsed.keyDecisions = decisionsMatch[1].trim();
-  if (scopeMatch) parsed.scope = scopeMatch[1].trim();
-  if (complexityMatch) parsed.complexityCheck = complexityMatch[1].trim();
+  let foundAny = false;
+  for (const { key, pattern } of sections) {
+    const match = content.match(pattern);
+    if (match) {
+      (parsed as any)[key] = match[1].trim();
+      foundAny = true;
+    }
+  }
 
-  // If we didn't find structured format, store raw content
-  if (!parsed.problem && !parsed.approach) {
+  // If we didn't find any headers, or if the content starts before any header
+  const firstHeaderIdx = content.search(/\*\*[^*]+\*\*:/);
+  if (!foundAny || (firstHeaderIdx > 0)) {
     parsed.raw = content;
   }
 

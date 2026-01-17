@@ -4,13 +4,16 @@ import { getPreviewType } from './preview-support';
 export type OutputFormat = string;
 
 export interface PromptOptions {
-  mode?: 'agent' | 'ask';
+  mode?: 'agent' | 'ask' | 'blueprint';
 }
 
 /**
  * Generate a system prompt tailored to the requested language/framework
  */
-export function getSystemPrompt(language: OutputFormat, options: PromptOptions = {}): string {
+export function getSystemPrompt(
+  language: OutputFormat,
+  options: PromptOptions = {}
+): string {
   const mode = options.mode || 'agent';
   const previewType = getPreviewType(language);
 
@@ -55,7 +58,15 @@ Your response should have THREE parts in this exact order:
 
 2. **Explanation**: A brief explanation of what you're building (2-3 sentences).
 
-3. **Code**: The complete code in an appropriate code block.`;
+3. **Code/Tools**: Use code blocks for file generation OR use tool tags for workspace interaction.
+
+## Available Tools (Agent Mode ONLY)
+You can interact with the user's workspace using these tags:
+- \`<tool_call name="list_files">{}</tool_call>\`: List all files.
+- \`<tool_call name="read_file">{"path": "file.ext"}</tool_call>\`: Read a file.
+- \`<tool_call name="write_file">{"path": "file.ext", "content": "...", "language": "..."}</tool_call>\`: Create/Update a file.
+
+If you use tools, wait for the result before continuing. You can use multiple tools in one turn.`;
 
   const rememberBlock =
     mode === 'ask'

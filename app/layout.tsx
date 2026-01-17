@@ -5,6 +5,7 @@ import { Toaster } from "sonner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
+import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -32,7 +33,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <ErrorBoundary>{children}</ErrorBoundary>
+          <ConvexClientProvider>
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </ConvexClientProvider>
           <Toaster />
         </ThemeProvider>
       </body>
