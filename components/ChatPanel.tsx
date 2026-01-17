@@ -2,7 +2,8 @@ import { useRef } from "react";
 import { cn } from "@/lib/utils";
 import { motion } from "framer-motion";
 import { Logo } from "@/components/ui/logo";
-import { ReasoningBlock } from "@/components/ReasoningBlock";
+import { ThinkingBlock } from "@/components/ThinkingBlock";
+import { SkillBadge, SkillThinkingIndicator } from "@/components/SkillBadge";
 import {
   PromptInputProvider,
   PromptInput,
@@ -20,13 +21,23 @@ import {
   PromptInputSpeechButton,
   PromptInputMessage,
 } from "@/components/prompt-input";
+import { SkillType } from "@/types/skill";
+
+interface ThinkingItem {
+  content: string;
+  thinkingType: string;
+  isComplete: boolean;
+}
 
 interface Message {
   role: string;
   content: string;
-  reasoning?: string;
-  isReasoningComplete?: boolean;
-  toolResults?: string; // Track tool execution feedback
+  thinking?: ThinkingItem[];
+  toolResults?: string;
+  skill?: {
+    type: SkillType;
+    stage: string;
+  };
 }
 
 interface ChatPanelProps {
@@ -35,6 +46,11 @@ interface ChatPanelProps {
   onSendMessage: (message: string) => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
   status?: "ready" | "submitting" | "streaming" | "error";
+  activeSkill?: {
+    type: SkillType;
+    stage: string;
+    confidence?: number;
+  } | null;
 }
 
 export default function ChatPanel({
@@ -42,32 +58,23 @@ export default function ChatPanel({
   isLoading,
   onSendMessage,
   messagesEndRef,
+  activeSkill,
 }: ChatPanelProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const handleSubmit = (message: PromptInputMessage) => {
     if (message.text.trim() && !isLoading) {
       onSendMessage(message.text);
-      // Note: attachments handling can be added later when API supports it
       if (message.files && message.files.length > 0) {
         console.log("Attachments received:", message.files);
-        // TODO: Handle file uploads when API supports it
       }
     }
   };
 
-  // Check if the last message is currently streaming reasoning
-  const lastMessage = messages[messages.length - 1];
-  const isReasoningStreaming = Boolean(
-    lastMessage?.role === "assistant" &&
-    lastMessage?.reasoning &&
-    !lastMessage?.isReasoningComplete
-  );
-
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-3">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center p-4">
             <div className="max-w-sm w-full space-y-8">
@@ -115,14 +122,17 @@ export default function ChatPanel({
                   msg.role === "user" ? "items-end" : "items-start"
                 )}
               >
-                {/* Reasoning Block (only for assistant messages with reasoning) */}
-                {msg.role === "assistant" && msg.reasoning && (
-                  <ReasoningBlock
-                    content={msg.reasoning}
-                    isStreaming={idx === messages.length - 1 && isReasoningStreaming}
+                {/* Thinking Blocks (for assistant messages with thinking) */}
+                {msg.role === "assistant" && msg.thinking && msg.thinking.map((thinking, tIdx) => (
+                  <ThinkingBlock
+                    key={tIdx}
+                    content={thinking.content}
+                    thinkingType={thinking.thinkingType}
+                    isStreaming={idx === messages.length - 1 && !thinking.isComplete}
+                    isComplete={thinking.isComplete}
                     className="w-full max-w-[85%]"
                   />
-                )}
+                ))}
                 
                 {/* Tool Results */}
                 {msg.role === "assistant" && msg.toolResults && (
@@ -148,19 +158,30 @@ export default function ChatPanel({
                     {msg.content}
                   </div>
                 )}
+
+                {/* Skill Badge for assistant messages */}
+                {msg.role === "assistant" && msg.skill && (
+                  <div className="ml-1">
+                    <SkillBadge skill={msg.skill} size="sm" showStage={false} />
+                  </div>
+                )}
               </motion.div>
             ))}
-            {isLoading && !messages[messages.length - 1]?.content && !messages[messages.length - 1]?.reasoning && (
+            {isLoading && !messages[messages.length - 1]?.content && (!messages[messages.length - 1]?.thinking || messages[messages.length - 1]?.thinking?.length === 0) && (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex justify-start"
+                className="flex flex-col items-start gap-2"
               >
-                <div className="bg-muted px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce" />
-                  <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce [animation-delay:0.1s]" />
-                  <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce [animation-delay:0.2s]" />
-                </div>
+                {activeSkill ? (
+                  <SkillThinkingIndicator skill={activeSkill} />
+                ) : (
+                  <div className="bg-muted px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1.5">
+                    <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce [animation-delay:0.1s]" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce [animation-delay:0.2s]" />
+                  </div>
+                )}
               </motion.div>
             )}
             <div ref={messagesEndRef} />

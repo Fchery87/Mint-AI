@@ -5,12 +5,14 @@ import * as Sentry from '@sentry/nextjs';
 import { getSystemPrompt, type OutputFormat } from '@/lib/prompts';
 import { checkRateLimit, getClientIp, formatRetryAfter } from '@/lib/ratelimit';
 import { getActiveProvider, type LLMProvider } from '@/lib/providers';
-import {
-  trackUsage,
-  getSessionCost,
-  formatCost,
-  formatTokens,
-} from '@/lib/cost-tracking';
+import { trackUsage } from '@/lib/cost-tracking';
+import { detectIntent, buildSkillContext } from '@/lib/skills/classifier';
+import { SkillType } from '@/types/skill';
+
+// SSE helper: Format event with proper named event syntax for EventSource
+function sseEvent(eventType: string, data: Record<string, unknown>): string {
+  return `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+}
 
 // Lazy initialize OpenAI-compatible client based on active provider
 let openaiClient: OpenAI | null = null;
@@ -42,6 +44,7 @@ const chatRequestSchema = z.object({
   outputFormat: z.string().optional(),
   mode: z.enum(['agent', 'ask']).optional(),
   webSearch: z.boolean().optional(),
+  forceSkill: z.string().optional(), // Optional: force a specific skill
 });
 
 export interface ChatRequest {
@@ -50,6 +53,7 @@ export interface ChatRequest {
   outputFormat?: OutputFormat;
   mode?: 'agent' | 'ask';
   webSearch?: boolean;
+  forceSkill?: string;
 }
 
 export interface ChatResponse {
@@ -58,9 +62,10 @@ export interface ChatResponse {
   message: string;
 }
 
-async function getWebSearchContext(
-  query: string
-): Promise<{ context: string; sources: Array<{ title?: string; url: string }> } | null> {
+async function getWebSearchContext(query: string): Promise<{
+  context: string;
+  sources: Array<{ title?: string; url: string }>;
+} | null> {
   const enabled = process.env.ENABLE_WEB_SEARCH === 'true';
   const apiKey = process.env.EXA_API_KEY;
   if (!enabled || !apiKey) return null;
@@ -80,7 +85,9 @@ async function getWebSearchContext(
   });
 
   if (!searchRes.ok) {
-    throw new Error(`Web search failed: ${searchRes.status} ${searchRes.statusText}`);
+    throw new Error(
+      `Web search failed: ${searchRes.status} ${searchRes.statusText}`,
+    );
   }
 
   const data: any = await searchRes.json();
@@ -147,11 +154,12 @@ export function splitReasoningAtTerminator(buffer: string): {
 
 export function splitReasoningForStreaming(
   buffer: string,
-  minChunkSize = 30
+  minChunkSize = 30,
 ): { chunk: string; rest: string } {
   const endTag = '</reasoning>';
   const holdback = endTag.length - 1;
-  const shouldFlush = buffer.includes('\n') || buffer.length >= minChunkSize + holdback;
+  const shouldFlush =
+    buffer.includes('\n') || buffer.length >= minChunkSize + holdback;
 
   if (!shouldFlush || buffer.length <= holdback) {
     return { chunk: '', rest: buffer };
@@ -159,79 +167,6 @@ export function splitReasoningForStreaming(
 
   const safeLen = buffer.length - holdback;
   return { chunk: buffer.slice(0, safeLen), rest: buffer.slice(safeLen) };
-}
-
-function extractCodeFromResponse(
-  text: string,
-  outputFormat: OutputFormat
-): string {
-  // Check for multi-file project format (```file:path/to/file.ext)
-  const fileMarkerPattern = /```file:([^\n]+)\n([\s\S]*?)```/g;
-  const fileBlocks = Array.from(text.matchAll(fileMarkerPattern));
-
-  // If we have file markers, return the full code section with markers preserved
-  if (fileBlocks.length > 0) {
-    // Return all the file blocks with markers intact for parsing
-    return fileBlocks
-      .map((match) => `\`\`\`file:${match[1]}\n${match[2]}\`\`\``)
-      .join('\n\n');
-  }
-
-  // Single-file extraction (original behavior)
-  const fenceRegex = /```([a-zA-Z0-9_-]+)?\n([\s\S]*?)```/g;
-  const blocks = Array.from(text.matchAll(fenceRegex)).map((match) => ({
-    lang: (match[1] || '').toLowerCase(),
-    code: match[2] || '',
-  }));
-
-  if (blocks.length === 0) {
-    // Heuristic fallback: some models omit fenced code blocks.
-    // Try to extract a "code-looking" region instead of returning the full response.
-    const withoutReasoningTags = text.replace(
-      /<reasoning>[\s\S]*?<\/reasoning>/gi,
-      ''
-    );
-    const lines = withoutReasoningTags.split('\n');
-
-    const fmt = (outputFormat || '').toLowerCase();
-    const preferPython = fmt.includes('python') || fmt === 'py';
-    const preferHtml = fmt === 'html' || fmt.includes('html');
-
-    const pythonStart = (line: string) =>
-      /^\s*(import\s+\w+|from\s+\w+\s+import\s+|def\s+\w+\s*\(|class\s+\w+\s*[:(]|if\s+__name__\s*==\s*['"]__main__['"]\s*:)/.test(
-        line
-      );
-    const htmlStart = (line: string) =>
-      /^\s*(<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>])/i.test(line);
-
-    let startIdx = -1;
-    if (preferPython) {
-      startIdx = lines.findIndex((l) => pythonStart(l) || l.includes('import pygame'));
-    } else if (preferHtml) {
-      startIdx = lines.findIndex((l) => htmlStart(l));
-    }
-
-    // Generic fallback: first "import"/"export"/"def"/"class" line.
-    if (startIdx === -1) {
-      startIdx = lines.findIndex((l) =>
-        /^\s*(import\s+|export\s+|def\s+|class\s+)/.test(l)
-      );
-    }
-
-    if (startIdx !== -1) {
-      return lines.slice(startIdx).join('\n').trim();
-    }
-
-    return withoutReasoningTags.trim();
-  }
-
-  const preferredLangs =
-    outputFormat === 'html'
-      ? new Set(['html'])
-      : new Set(['tsx', 'typescript', 'jsx', 'react']);
-
-  const preferred = blocks.find((b) => b.lang && preferredLangs.has(b.lang));
-  return (preferred || blocks[0]).code.trim();
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
@@ -254,7 +189,7 @@ export async function POST(req: NextRequest): Promise<Response> {
             'X-RateLimit-Remaining': rateLimit.remaining.toString(),
             'X-RateLimit-Reset': new Date(rateLimit.resetAt).toISOString(),
           },
-        }
+        },
       );
     }
 
@@ -274,7 +209,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           error: 'Invalid request',
           details: errorDetails,
         },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
@@ -282,7 +217,13 @@ export async function POST(req: NextRequest): Promise<Response> {
     const outputFormat: OutputFormat =
       validationResult.data.outputFormat || 'React';
     const mode: 'agent' | 'ask' = validationResult.data.mode || 'agent';
-    const webSearchRequested: boolean = Boolean(validationResult.data.webSearch);
+    const webSearchRequested: boolean = Boolean(
+      validationResult.data.webSearch,
+    );
+    const forceSkill: string | undefined = validationResult.data.forceSkill;
+
+    // Track request start time for duration calculation
+    const requestStartTime = Date.now();
 
     // Get or create chat history
     const currentChatId = chatId || generateChatId();
@@ -294,17 +235,107 @@ export async function POST(req: NextRequest): Promise<Response> {
       content: message,
     });
 
+    // Detect user intent and determine skill
+    const intent = forceSkill
+      ? { skillType: forceSkill as SkillType, confidence: 1.0 }
+      : detectIntent(message);
+    buildSkillContext(message, intent.skillType); // Build context for potential future use
+
     // Get the active provider and client
     const { client, provider } = getOpenAIClient();
-    const systemPrompt = getSystemPrompt(outputFormat, { mode });
+
+    // Build skill-aware system prompt
+    let systemPrompt = getSystemPrompt(outputFormat, { mode });
+
+    // Add skill-specific context to system prompt
+    const skillInstructions: Record<SkillType, string> = {
+      [SkillType.BRAINSTORM]: `\n\nYou are in BRAINSTORM mode.
+
+IMPORTANT: Think through the request step by step. Output ONE thinking tag at a time for each aspect. Wait for each to be sent before continuing.
+
+Use these thinking tags in order:
+1. <thinking type="requirements">What you're understanding about requirements</thinking>
+2. <thinking type="considerations">Key considerations and constraints</thinking>
+3. <thinking type="approaches">Different approaches being explored</thinking>
+4. <thinking type="questions">Clarifying questions if needed</thinking>
+
+Each tag should be sent separately - don't combine multiple thoughts in one tag.`,
+
+      [SkillType.PLAN]: `\n\nYou are in PLAN mode.
+
+IMPORTANT: Break down the implementation step by step. Output ONE thinking tag at a time for each step.
+
+Use these thinking tags in order:
+1. <thinking type="understanding">Understanding of the problem</thinking>
+2. <thinking type="breakdown">Step-by-step solution breakdown</thinking>
+3. <thinking type="dependencies">Dependencies between steps</thinking>
+4. <thinking type="challenges">Potential challenges and mitigations</thinking>
+
+Each tag should be sent separately.`,
+
+      [SkillType.CODE]: `\n\nYou are in CODE mode.
+
+IMPORTANT: Before writing code, think through the implementation step by step. Output ONE thinking tag at a time for each aspect.
+
+Use these thinking tags in order:
+1. <thinking type="requirements">What you're building - core requirements</thinking>
+2. <thinking type="architecture">Architecture and file structure decisions</thinking>
+3. <thinking type="components">Key functions/components you'll create</thinking>
+4. <thinking type="edgecases">Edge cases you're handling</thinking>
+
+Each tag should be sent separately.`,
+
+      [SkillType.DEBUG]: `\n\nYou are in DEBUG mode.
+
+IMPORTANT: Analyze the issue step by step. Output ONE thinking tag at a time.
+
+Use these thinking tags in order:
+1. <thinking type="analysis">Understanding the reported issue</thinking>
+2. <thinking type="hypothesis">Where you think the problem lies</thinking>
+3. <thinking type="investigation">What you'll check/verify</thinking>
+4. <thinking type="solution">Your proposed fix approach</thinking>
+
+Each tag should be sent separately.`,
+
+      [SkillType.REVIEW]: `\n\nYou are in REVIEW mode.
+
+IMPORTANT: Review the code systematically. Output ONE thinking tag at a time.
+
+Use these thinking tags in order:
+1. <thinking type="overview">What you're reviewing</thinking>
+2. <thinking type="correctness">Code correctness checks</thinking>
+3. <thinking type="bestpractices">Best practices verification</thinking>
+4. <thinking type="improvements">Suggested improvements</thinking>
+
+Each tag should be sent separately.`,
+
+      [SkillType.SEARCH]: `\n\nYou are in SEARCH mode.
+
+IMPORTANT: Show your search strategy. Output ONE thinking tag at a time.
+
+Use these thinking tags in order:
+1. <thinking type="info">What information you need</thinking>
+2. <thinking type="approach">How you'll find it</thinking>
+3. <thinking type="findings">Key findings from search</thinking>
+
+Each tag should be sent separately.`,
+
+      [SkillType.GENERAL]: `\n\nIMPORTANT: Think step by step. Output ONE thinking tag at a time for each aspect of your response.
+
+Use thinking tags as needed:
+<thinking type="understanding">What you're understanding</thinking>
+<thinking type="approach">How you'll respond</thinking>
+
+Each tag should be sent separately.`,
+    };
+
+    systemPrompt += skillInstructions[intent.skillType] || '';
 
     let webSearchContext: string | null = null;
-    let webSearchSources: Array<{ title?: string; url: string }> | null = null;
     if (webSearchRequested) {
       try {
         const search = await getWebSearchContext(message);
         webSearchContext = search?.context || null;
-        webSearchSources = search?.sources || null;
       } catch (e) {
         Sentry.captureException(e, {
           tags: { source: 'web-search' },
@@ -318,7 +349,9 @@ export async function POST(req: NextRequest): Promise<Response> {
       model: provider.model,
       messages: [
         { role: 'system', content: systemPrompt },
-        ...(webSearchContext ? [{ role: 'system', content: webSearchContext } as const] : []),
+        ...(webSearchContext
+          ? [{ role: 'system', content: webSearchContext } as const]
+          : []),
         ...history,
       ],
       max_tokens: 4096,
@@ -333,14 +366,39 @@ export async function POST(req: NextRequest): Promise<Response> {
     const encoder = new TextEncoder();
     let fullResponse = '';
     let usageData: any = null;
+    let accumulatedCode = ''; // Track full code for done event
+
+    // Map skill type to workflow stage
+    const skillToStage: Record<SkillType, string> = {
+      [SkillType.BRAINSTORM]: 'thinking',
+      [SkillType.PLAN]: 'planning',
+      [SkillType.CODE]: 'coding',
+      [SkillType.DEBUG]: 'coding',
+      [SkillType.REVIEW]: 'reviewing',
+      [SkillType.SEARCH]: 'thinking',
+      [SkillType.GENERAL]: 'idle',
+    };
 
     const readableStream = new ReadableStream({
       async start(controller) {
         try {
+          // Send skill activation event first (named event for EventSource)
+          controller.enqueue(
+            encoder.encode(
+              sseEvent('skill-activated', {
+                skill: {
+                  type: intent.skillType,
+                  stage: skillToStage[intent.skillType],
+                  confidence: intent.confidence,
+                },
+              }),
+            ),
+          );
+
           let buffer = '';
-          let inReasoning = false;
           let inCodeBlock = false;
-          let reasoningBuffer = '';
+          let thinkingType: string | null = null;
+          let thinkingBuffer = '';
           let explanationBuffer = '';
 
           for await (const chunk of stream) {
@@ -357,72 +415,107 @@ export async function POST(req: NextRequest): Promise<Response> {
 
               // Process buffer for tags and content
               while (buffer.length > 0) {
-                // Check for reasoning start tag
-                if (!inReasoning && buffer.includes('<reasoning>')) {
-                  const idx = buffer.indexOf('<reasoning>');
-                  const before = buffer.substring(0, idx);
+                // Check for thinking start tag anywhere in buffer: <thinking type="...">
+                const thinkingStartMatch = buffer.match(
+                  /<thinking\s+type="([^"]+)">/,
+                );
+                if (
+                  thinkingStartMatch &&
+                  thinkingStartMatch.index !== undefined
+                ) {
+                  const before = buffer.substring(0, thinkingStartMatch.index);
 
-                  // Send any text before reasoning tag as explanation
+                  // Send any text before thinking tag as explanation
                   if (before.trim()) {
                     explanationBuffer += before;
-                    const data = JSON.stringify({
-                      type: 'explanation-chunk',
-                      content: before,
-                      chatId: currentChatId,
-                    });
-                    controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                    controller.enqueue(
+                      encoder.encode(
+                        sseEvent('explanation-chunk', { content: before }),
+                      ),
+                    );
                   }
 
-                  buffer = buffer.substring(idx + 11); // Remove <reasoning>
-                  inReasoning = true;
+                  buffer = buffer.substring(
+                    thinkingStartMatch.index + thinkingStartMatch[0].length,
+                  );
+                  thinkingType = thinkingStartMatch[1];
+                  thinkingBuffer = '';
                   continue;
                 }
 
-                // While in reasoning, stop at the first terminator:
-                // - Explicit </reasoning>
-                // - Any fenced code block ``` (models sometimes emit code before closing the tag)
-                if (inReasoning) {
-                  const split = splitReasoningAtTerminator(buffer);
-                  if (split.terminated) {
-                    if (split.reasoningContent) {
-                      reasoningBuffer += split.reasoningContent;
-                      const data = JSON.stringify({
-                        type: 'reasoning-chunk',
-                        content: split.reasoningContent,
-                        chatId: currentChatId,
-                      });
-                      controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-                    }
+                // Check for thinking end tag
+                if (thinkingType && buffer.includes('</thinking>')) {
+                  const idx = buffer.indexOf('</thinking>');
+                  const thinkingContent = buffer.substring(0, idx);
 
-                    const completeData = JSON.stringify({
-                      type: 'reasoning-complete',
-                      chatId: currentChatId,
-                    });
+                  if (thinkingContent) {
+                    thinkingBuffer += thinkingContent;
+                    // Send thinking chunk
                     controller.enqueue(
-                      encoder.encode(`data: ${completeData}\n\n`)
+                      encoder.encode(
+                        sseEvent('thinking-chunk', {
+                          thinkingType,
+                          content: thinkingBuffer,
+                        }),
+                      ),
                     );
-
-                    buffer = split.rest;
-                    inReasoning = false;
-                    continue;
                   }
+
+                  // Send thinking-complete
+                  controller.enqueue(
+                    encoder.encode(
+                      sseEvent('thinking-complete', { thinkingType }),
+                    ),
+                  );
+
+                  buffer = buffer.substring(idx + 12); // Remove </thinking>
+                  thinkingType = null;
+                  thinkingBuffer = '';
+                  continue;
                 }
 
-                // If in reasoning, accumulate and stream immediately for real-time feel
-                if (inReasoning) {
-                  // Stream reasoning content while holding back enough characters to avoid
-                  // leaking partial terminators (e.g. </reasoning> split across chunks).
-                  const flushed = splitReasoningForStreaming(buffer);
-                  if (flushed.chunk) {
-                    reasoningBuffer += flushed.chunk;
-                    const data = JSON.stringify({
-                      type: 'reasoning-chunk',
-                      content: flushed.chunk,
-                      chatId: currentChatId,
-                    });
-                    controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-                    buffer = flushed.rest;
-                    continue;
+                // While in thinking block, stream content
+                if (thinkingType) {
+                  // Check for potential partial closing tag - hold back if we might have incomplete tag
+                  // </thinking> could be split like </thi or </think etc.
+                  const potentialCloseIdx = buffer.lastIndexOf('<');
+                  const hasPartialCloseTag =
+                    potentialCloseIdx !== -1 &&
+                    potentialCloseIdx > buffer.length - 12 && // </thinking> is 11 chars
+                    !buffer.includes('>', potentialCloseIdx);
+
+                  // Check if we have a complete thought to send
+                  if (
+                    (buffer.length > 30 ||
+                      buffer.includes('\n') ||
+                      buffer.endsWith('. ')) &&
+                    !hasPartialCloseTag
+                  ) {
+                    // If there's a potential partial tag, only send content before it
+                    let contentToSend = buffer;
+                    let remainingBuffer = '';
+
+                    if (potentialCloseIdx !== -1 && potentialCloseIdx > 0) {
+                      // Check if the < might be start of </thinking>
+                      const afterLt = buffer.substring(potentialCloseIdx);
+                      if (afterLt.startsWith('</') || afterLt === '<') {
+                        contentToSend = buffer.substring(0, potentialCloseIdx);
+                        remainingBuffer = buffer.substring(potentialCloseIdx);
+                      }
+                    }
+
+                    if (contentToSend.trim()) {
+                      thinkingBuffer += contentToSend;
+                      controller.enqueue(
+                        encoder.encode(
+                          sseEvent('thinking-chunk', {
+                            thinkingType,
+                            content: thinkingBuffer,
+                          }),
+                        ),
+                      );
+                    }
+                    buffer = remainingBuffer;
                   }
                   break;
                 }
@@ -436,63 +529,125 @@ export async function POST(req: NextRequest): Promise<Response> {
                     // Starting code block - send any text before as explanation
                     if (before.trim()) {
                       explanationBuffer += before;
-                      const data = JSON.stringify({
-                        type: 'explanation-chunk',
-                        content: before,
-                        chatId: currentChatId,
-                      });
-                      controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                      controller.enqueue(
+                        encoder.encode(
+                          sseEvent('explanation-chunk', { content: before }),
+                        ),
+                      );
                     }
                     buffer = buffer.substring(idx + 3);
-                    // Strip optional language identifier line (e.g. "typescript\\n")
+                    // Skip language identifier or file path line if present
+                    // Matches: tsx, typescript, file:package.json, file:app/page.tsx, etc.
                     const lineEnd = buffer.indexOf('\n');
                     if (lineEnd !== -1) {
                       const firstLine = buffer.substring(0, lineEnd).trim();
-                      if (!firstLine) {
-                        buffer = buffer.substring(lineEnd + 1);
-                      } else if (
-                        firstLine.length <= 20 &&
-                        /^[a-zA-Z0-9_-]+$/.test(firstLine)
+                      // Match simple language (tsx) or file:path format
+                      if (
+                        firstLine &&
+                        /^(file:[^\s]+|[a-zA-Z0-9_+-]+)$/.test(firstLine)
                       ) {
                         buffer = buffer.substring(lineEnd + 1);
                       }
                     }
                     inCodeBlock = true;
                   } else {
-                    // Ending code block - send accumulated code
-                    const codeData = JSON.stringify({
-                      type: 'code-chunk',
-                      content: before,
-                      chatId: currentChatId,
-                    });
-                    controller.enqueue(encoder.encode(`data: ${codeData}\n\n`));
+                    // Ending code block - send as code-chunk event
+                    accumulatedCode += before;
+                    controller.enqueue(
+                      encoder.encode(
+                        sseEvent('code-chunk', { content: before }),
+                      ),
+                    );
                     buffer = buffer.substring(idx + 3);
                     inCodeBlock = false;
                   }
                   continue;
                 }
 
-                // Stream code or explanation based on state
+                // Stream code or text
                 if (inCodeBlock) {
-                  if (buffer.length > 30 || buffer.includes('\n')) {
-                    const codeData = JSON.stringify({
-                      type: 'code-chunk',
-                      content: buffer,
-                      chatId: currentChatId,
-                    });
-                    controller.enqueue(encoder.encode(`data: ${codeData}\n\n`));
+                  if (buffer.length > 20 || buffer.includes('\n')) {
+                    accumulatedCode += buffer;
+                    controller.enqueue(
+                      encoder.encode(
+                        sseEvent('code-chunk', { content: buffer }),
+                      ),
+                    );
                     buffer = '';
                   }
                 } else {
-                  if (buffer.length > 30 || buffer.includes('\n')) {
+                  // Check for potential partial thinking tag or code block - hold back if incomplete
+                  const potentialTagIndex = buffer.indexOf('<');
+                  const potentialCodeIndex = buffer.indexOf('`');
+
+                  const hasCompletePotentialTag =
+                    potentialTagIndex === -1 ||
+                    (potentialTagIndex !== -1 &&
+                      buffer.includes('>', potentialTagIndex));
+
+                  // Check if we have a partial code block (1-2 backticks at end)
+                  const hasPartialCodeBlock =
+                    (buffer.endsWith('`') && !buffer.endsWith('```')) ||
+                    (buffer.endsWith('``') && !buffer.endsWith('```'));
+
+                  // If buffer contains full ``` we should process it in the code block section
+                  const hasFullCodeBlock = buffer.includes('```');
+
+                  if (hasFullCodeBlock) {
+                    // Let the code block handler above deal with this
+                    // This shouldn't happen since we continue after code block detection
+                    break;
+                  }
+
+                  if (
+                    (buffer.length > 20 || buffer.includes('\n')) &&
+                    hasCompletePotentialTag &&
+                    !hasPartialCodeBlock
+                  ) {
                     explanationBuffer += buffer;
-                    const data = JSON.stringify({
-                      type: 'explanation-chunk',
-                      content: buffer,
-                      chatId: currentChatId,
-                    });
-                    controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+                    controller.enqueue(
+                      encoder.encode(
+                        sseEvent('explanation-chunk', { content: buffer }),
+                      ),
+                    );
                     buffer = '';
+                  } else if (
+                    potentialTagIndex !== -1 &&
+                    potentialTagIndex > 0 &&
+                    !hasCompletePotentialTag
+                  ) {
+                    // Send content before the potential tag, keep the rest
+                    const safeContent = buffer.substring(0, potentialTagIndex);
+                    if (safeContent.trim()) {
+                      explanationBuffer += safeContent;
+                      controller.enqueue(
+                        encoder.encode(
+                          sseEvent('explanation-chunk', {
+                            content: safeContent,
+                          }),
+                        ),
+                      );
+                    }
+                    buffer = buffer.substring(potentialTagIndex);
+                  } else if (
+                    potentialCodeIndex !== -1 &&
+                    potentialCodeIndex > 0 &&
+                    buffer.length - potentialCodeIndex < 3
+                  ) {
+                    // We have a ` near the end - might be start of code block
+                    // Send content before it, keep the potential code marker
+                    const safeContent = buffer.substring(0, potentialCodeIndex);
+                    if (safeContent.trim()) {
+                      explanationBuffer += safeContent;
+                      controller.enqueue(
+                        encoder.encode(
+                          sseEvent('explanation-chunk', {
+                            content: safeContent,
+                          }),
+                        ),
+                      );
+                    }
+                    buffer = buffer.substring(potentialCodeIndex);
                   }
                 }
                 break;
@@ -502,12 +657,18 @@ export async function POST(req: NextRequest): Promise<Response> {
 
           // Send any remaining buffer
           if (buffer.trim()) {
-            const data = JSON.stringify({
-              type: inCodeBlock ? 'code-chunk' : 'explanation-chunk',
-              content: buffer,
-              chatId: currentChatId,
-            });
-            controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+            if (inCodeBlock) {
+              accumulatedCode += buffer;
+              controller.enqueue(
+                encoder.encode(sseEvent('code-chunk', { content: buffer })),
+              );
+            } else {
+              controller.enqueue(
+                encoder.encode(
+                  sseEvent('explanation-chunk', { content: buffer }),
+                ),
+              );
+            }
           }
 
           // Save complete response to history
@@ -517,12 +678,7 @@ export async function POST(req: NextRequest): Promise<Response> {
           });
           chatHistories.set(currentChatId, history);
 
-          // Extract code from the response
-          const code =
-            mode === 'ask' ? '' : extractCodeFromResponse(fullResponse, outputFormat);
-
           // Track usage and calculate cost
-          let costData = null;
           if (usageData) {
             trackUsage(currentChatId, {
               promptTokens: usageData.prompt_tokens || 0,
@@ -531,26 +687,28 @@ export async function POST(req: NextRequest): Promise<Response> {
               model: provider.model,
               timestamp: Date.now(),
             });
-
-            const sessionCost = getSessionCost(currentChatId);
-            costData = {
-              cost: formatCost(sessionCost.totalCost),
-              tokens: formatTokens(usageData.total_tokens),
-              rawCost: sessionCost.totalCost,
-              rawTokens: usageData.total_tokens,
-            };
           }
 
-          // Send final message with code and cost data
-          const finalData = JSON.stringify({
-            type: 'done',
-            chatId: currentChatId,
-            code,
-            explanation: explanationBuffer,
-            usage: costData,
-            sources: webSearchSources,
-          });
-          controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+          // Send done event with full metadata for frontend
+          controller.enqueue(
+            encoder.encode(
+              sseEvent('done', {
+                chatId: currentChatId,
+                code: accumulatedCode,
+                duration: Date.now() - requestStartTime,
+                skill: {
+                  type: intent.skillType,
+                  stage: skillToStage[intent.skillType],
+                },
+                usage: usageData
+                  ? {
+                      cost: `$${(usageData.prompt_tokens * 0.00001 + usageData.completion_tokens * 0.00003).toFixed(4)}`,
+                      tokens: `${usageData.total_tokens || 0}`,
+                    }
+                  : null,
+              }),
+            ),
+          );
           controller.close();
         } catch (error) {
           // Log to Sentry
@@ -559,12 +717,16 @@ export async function POST(req: NextRequest): Promise<Response> {
             extra: { chatId: currentChatId },
           });
 
-          const errorData = JSON.stringify({
-            type: 'error',
-            error:
-              error instanceof Error ? error.message : 'Stream error occurred',
-          });
-          controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+          controller.enqueue(
+            encoder.encode(
+              sseEvent('error', {
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : 'Stream error occurred',
+              }),
+            ),
+          );
           controller.close();
         }
       },
@@ -575,6 +737,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         Connection: 'keep-alive',
+        'X-Accel-Buffering': 'no',
       },
     });
   } catch (error) {
@@ -593,7 +756,7 @@ export async function POST(req: NextRequest): Promise<Response> {
         error:
           error instanceof Error ? error.message : 'Failed to process message',
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

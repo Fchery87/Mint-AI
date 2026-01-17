@@ -25,12 +25,22 @@ import {
 } from "@/lib/workspace-storage";
 import { unifiedDiffForFiles } from "@/lib/diff";
 import { downloadProjectAsZip, downloadTextFile } from "@/lib/download";
+import { SkillType } from "@/types/skill";
+
+interface ThinkingItem {
+  content: string;
+  thinkingType: string;
+  isComplete: boolean;
+}
 
 interface ChatMessage {
   role: string;
   content: string;
-  reasoning?: string;
-  isReasoningComplete?: boolean;
+  thinking?: ThinkingItem[];
+  skill?: {
+    type: SkillType;
+    stage: string;
+  };
 }
 
 type OutputFormat = string; // Any language/framework
@@ -41,13 +51,14 @@ export default function Home() {
   const [chatId, setChatId] = useState<string | undefined>();
   const [componentCode, setComponentCode] = useState("");
   const [projectOutput, setProjectOutput] = useState<ProjectOutput | null>(null);
-  const [outputFormat, setOutputFormat] = useState<OutputFormat>("React"); // Track current language (for future UI display)
+  const [outputFormat, setOutputFormat] = useState<OutputFormat>("React");
   const [inputStatus, setInputStatus] = useState<"ready" | "submitting" | "streaming" | "error">("ready");
   const [sessionCost, setSessionCost] = useState<{ cost: string; tokens: string } | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
   const [draftWorkspace, setDraftWorkspace] = useState<WorkspaceState | null>(null);
   const [agentMode, setAgentMode] = useState<"agent" | "ask">("agent");
   const [webSearch, setWebSearch] = useState(false);
+  const [activeSkill, setActiveSkill] = useState<{ type: SkillType; stage: string; confidence?: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -100,6 +111,9 @@ export default function Home() {
     const detectedLanguage = detectLanguage(message);
     setOutputFormat(detectedLanguage);
 
+    // Clear previous skill state
+    setActiveSkill(null);
+
     // Add user message to chat
     const userMessage: ChatMessage = { role: "user", content: message };
     setMessages((prev) => [...prev, userMessage]);
@@ -149,49 +163,111 @@ export default function Home() {
       const decoder = new TextDecoder();
       let streamedExplanation = "";
       let streamedCode = "";
-      let streamedReasoning = "";
       let accumulatedCode = ""; // Track full code for incremental parsing
 
       if (!reader) {
         throw new Error("No response body");
       }
 
+      // Buffer for accumulating partial SSE messages
+      let sseBuffer = '';
+      
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value);
-        const lines = chunk.split("\n");
+        const chunk = decoder.decode(value, { stream: true });
+        sseBuffer += chunk;
+        
+        // Split on double newlines (SSE message separator)
+        const messages = sseBuffer.split('\n\n');
+        // Keep the last potentially incomplete message in buffer
+        sseBuffer = messages.pop() || '';
 
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
-            try {
-              const data = JSON.parse(line.slice(6));
+        // Track thinking content by type (reset per chunk batch for accumulation)
 
-              if (data.type === "reasoning-chunk") {
-                // Update reasoning content
-                streamedReasoning += data.content;
+        for (const message of messages) {
+          if (!message.trim()) continue;
+          
+          const lines = message.split('\n');
+          let eventType = '';
+          let eventData = '';
+          
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              eventData = line.slice(6);
+            }
+          }
+          
+          if (!eventData) continue;
+          
+          try {
+            const data = JSON.parse(eventData);
+
+            switch (eventType) {
+              case 'skill-activated':
+                // Update active skill indicator
+                setActiveSkill(data.skill);
+                setInputStatus("streaming");
+                break;
+                
+              case 'thinking-chunk': {
+                // Update thinking content for specific thinking type
+                const thinkingType = data.thinkingType;
                 setInputStatus("streaming");
                 setMessages((prev) => {
                   const updated = [...prev];
+                  const existingThinking = updated[assistantIndex].thinking || [];
+                  const existingIndex = existingThinking.findIndex(t => t.thinkingType === thinkingType);
+                  
+                  const newThinkingItem = {
+                    content: data.content,
+                    thinkingType,
+                    isComplete: false,
+                  };
+                  
+                  if (existingIndex >= 0) {
+                    existingThinking[existingIndex] = newThinkingItem;
+                  } else {
+                    existingThinking.push(newThinkingItem);
+                  }
+                  
                   updated[assistantIndex] = {
                     ...updated[assistantIndex],
-                    reasoning: streamedReasoning,
-                    isReasoningComplete: false,
+                    thinking: [...existingThinking],
                   };
                   return updated;
                 });
-              } else if (data.type === "reasoning-complete") {
-                // Mark reasoning as complete
+                break;
+              }
+              
+              case 'thinking-complete': {
+                // Mark thinking as complete
+                const thinkingType = data.thinkingType;
                 setMessages((prev) => {
                   const updated = [...prev];
+                  const existingThinking = updated[assistantIndex].thinking || [];
+                  const existingIndex = existingThinking.findIndex(t => t.thinkingType === thinkingType);
+                  
+                  if (existingIndex >= 0) {
+                    existingThinking[existingIndex] = {
+                      ...existingThinking[existingIndex],
+                      isComplete: true,
+                    };
+                  }
+                  
                   updated[assistantIndex] = {
                     ...updated[assistantIndex],
-                    isReasoningComplete: true,
+                    thinking: [...existingThinking],
                   };
                   return updated;
                 });
-              } else if (data.type === "explanation-chunk") {
+                break;
+              }
+              
+              case 'explanation-chunk':
                 // Update chat message with explanation
                 streamedExplanation += data.content;
                 setMessages((prev) => {
@@ -202,7 +278,9 @@ export default function Home() {
                   };
                   return updated;
                 });
-              } else if (data.type === "code-chunk") {
+                break;
+                
+              case 'code-chunk':
                 // Update code preview
                 streamedCode += data.content;
                 accumulatedCode += data.content;
@@ -213,7 +291,9 @@ export default function Home() {
                 if (parsed.type === "project" && parsed.files.length > 0) {
                   setProjectOutput(parsed);
                 }
-              } else if (data.type === "done") {
+                break;
+                
+              case 'done': {
                 // Final response with extracted code
                 if (!chatId) {
                   setChatId(data.chatId);
@@ -223,19 +303,31 @@ export default function Home() {
                   setComponentCode(data.code);
 
                   // Parse the response to detect project mode
-                  const parsed = parseProjectOutput(data.code);
-                  setProjectOutput(parsed);
+                  const parsedOutput = parseProjectOutput(data.code);
+                  setProjectOutput(parsedOutput);
 
                   // Commit to workspace in Agent mode
                   if (agentMode === "agent") {
                     setWorkspace((prev) => {
-                      const next = workspaceFromProjectOutput(parsed);
+                      const next = workspaceFromProjectOutput(parsedOutput);
                       if (prev?.checkpoints?.length) {
                         next.checkpoints = prev.checkpoints;
                       }
                       return next;
                     });
                   }
+                }
+
+                // Update message with skill info
+                if (data.skill) {
+                  setMessages((prev) => {
+                    const updated = [...prev];
+                    updated[assistantIndex] = {
+                      ...updated[assistantIndex],
+                      skill: data.skill,
+                    };
+                    return updated;
+                  });
                 }
 
                 // Run quality check (development mode only)
@@ -260,16 +352,18 @@ export default function Home() {
                 if (agentMode === "ask" || !hasCode) {
                   toast.success("Answer ready!");
                 } else {
-                  const parsed = parseProjectOutput(data.code);
-                  toast.success(parsed.type === "project" ? "Project generated!" : "Component generated!");
+                  const parsedFinal = parseProjectOutput(data.code);
+                  toast.success(parsedFinal.type === "project" ? "Project generated!" : "Component generated!");
                 }
-              } else if (data.type === "error") {
-                throw new Error(data.error);
+                break;
               }
-            } catch (e) {
-              // Skip invalid JSON lines
-              console.warn("Failed to parse SSE data:", e);
+              
+              case 'error':
+                throw new Error(data.error);
             }
+          } catch (e) {
+            // Skip invalid JSON lines
+            console.warn("Failed to parse SSE data:", e, eventData);
           }
         }
       }
@@ -322,6 +416,7 @@ export default function Home() {
                 onSendMessage={handleSendMessage}
                 messagesEndRef={messagesEndRef}
                 status={inputStatus}
+                activeSkill={activeSkill}
               />
             </motion.div>
           }
