@@ -85,6 +85,18 @@ export function parseProjectOutput(response: string): ProjectOutput {
     return { type: 'project', files, name };
   }
 
+  // Fallback: look for inline file markers without fences
+  const inlineFiles = parseInlineFileMarkers(response);
+  if (inlineFiles.length > 0) {
+    return {
+      type: 'project',
+      files: inlineFiles,
+      name: inlineFiles.find((f) => f.path === 'package.json')
+        ? 'project'
+        : 'project',
+    };
+  }
+
   // Otherwise, treat as single file output
   // Extract the code from the first code block
   const codePattern = /```(\w+)?\n([\s\S]*?)```/;
@@ -133,15 +145,49 @@ export function parseProjectOutput(response: string): ProjectOutput {
   };
 }
 
+function parseInlineFileMarkers(response: string): ProjectFile[] {
+  const normalized = response.replace(/\r\n/g, '\n');
+  const lines = normalized.split('\n');
+  const files: ProjectFile[] = [];
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (line.startsWith('file:')) {
+      const path = line.slice('file:'.length).trim();
+      i += 1;
+      const contentLines: string[] = [];
+      while (i < lines.length && !lines[i].trim().startsWith('file:')) {
+        contentLines.push(lines[i]);
+        i += 1;
+      }
+      const content = contentLines.join('\n').trim();
+      files.push({
+        path,
+        content,
+        language: getLanguageFromPath(path),
+      });
+      continue;
+    }
+    i += 1;
+  }
+
+  return files;
+}
+
 function inferLanguageFromContent(content: string): string {
   const text = content.replace(/\r\n/g, '\n');
 
-  // Python
+  // React/TSX-ish - check FIRST (most common for this app)
   if (
-    /(^|\n)\s*(import\s+\w+|from\s+\w+\s+import\s+)/.test(text) ||
-    /(^|\n)\s*(def\s+\w+\s*\(|class\s+\w+\s*[:(])/.test(text)
+    /import\s+.*\s+from\s+['"]react['"]/.test(text) ||
+    /from\s+['"]react['"]/.test(text) ||
+    /import\s+React\b/.test(text) ||
+    /export\s+default\s+function\s+\w+/.test(text) ||
+    /return\s*\(\s*</.test(text) ||
+    /<[A-Z][a-zA-Z]*[\s/>]/.test(text) // JSX component tags
   ) {
-    return 'python';
+    return 'tsx';
   }
 
   // HTML
@@ -149,18 +195,25 @@ function inferLanguageFromContent(content: string): string {
     return 'html';
   }
 
-  // React/TSX-ish
+  // JS/TS - check before Python (JS imports look like Python)
   if (
-    /(import\s+React\b|from\s+['"]react['"]|export\s+default\s+function|return\s*\(<)/.test(
-      text
-    )
+    /import\s+.*\s+from\s+['"]/.test(text) || // ES6 imports
+    /export\s+(default|const|function|class)\s+/.test(text) ||
+    /const\s+\w+\s*=\s*\(/.test(text) || // arrow functions
+    /interface\s+\w+\s*\{/.test(text) || // TypeScript
+    /type\s+\w+\s*=/.test(text) // TypeScript
   ) {
-    return 'tsx';
+    return 'typescript';
   }
 
-  // JS/TS
-  if (/(export\s+default|export\s+function|const\s+\w+\s*=|function\s+\w+\s*\()/.test(text)) {
-    return 'javascript';
+  // Python - more specific checks to avoid false positives with JS
+  if (
+    /(^|\n)\s*def\s+\w+\s*\(/.test(text) || // Python function def
+    /(^|\n)\s*class\s+\w+\s*[:(]/.test(text) || // Python class
+    /(^|\n)\s*from\s+\w+\s+import\s+/.test(text) || // Python from X import Y
+    /:\s*\n\s+(pass|return|if|for|while)\b/.test(text) // Python indented blocks
+  ) {
+    return 'python';
   }
 
   return 'plaintext';
@@ -176,6 +229,8 @@ function inferDefaultPathFromLanguage(language: string, ext?: string): string {
       return 'index.html';
     case 'tsx':
       return 'Component.tsx';
+    case 'typescript':
+      return 'index.ts';
     case 'javascript':
       return 'index.js';
     default:
@@ -198,8 +253,7 @@ export interface FileTreeNode {
 export function buildFileTree(files: ProjectFile[]): FileTreeNode[] {
   const root: FileTreeNode[] = [];
 
-  const isFlat =
-    files.length > 1 && files.every((f) => !f.path.includes('/'));
+  const isFlat = files.length > 1 && files.every((f) => !f.path.includes('/'));
 
   const getVirtualGroup = (file: ProjectFile): string => {
     const ext = file.path.split('.').pop()?.toLowerCase() || '';
@@ -213,7 +267,9 @@ export function buildFileTree(files: ProjectFile[]): FileTreeNode[] {
   };
 
   for (const file of files) {
-    const virtualPath = isFlat ? `${getVirtualGroup(file)}/${file.path}` : file.path;
+    const virtualPath = isFlat
+      ? `${getVirtualGroup(file)}/${file.path}`
+      : file.path;
     const parts = virtualPath.split('/');
     let current = root;
     let currentPath = '';

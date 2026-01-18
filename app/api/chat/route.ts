@@ -397,6 +397,7 @@ Each tag should be sent separately.`,
 
           let buffer = '';
           let inCodeBlock = false;
+          let pendingFileMarker = false;
           let thinkingType: string | null = null;
           let thinkingBuffer = '';
           let explanationBuffer = '';
@@ -542,16 +543,43 @@ Each tag should be sent separately.`,
                     let fileMarker = '';
                     if (lineEnd !== -1) {
                       const firstLine = buffer.substring(0, lineEnd).trim();
-                      // Match simple language (tsx) or file:path format
-                      if (
-                        firstLine &&
-                        /^(file:[^\s]+|[a-zA-Z0-9_+-]+)$/.test(firstLine)
-                      ) {
-                        // IMPORTANT: Preserve file markers for parseProjectOutput to detect multiple files
-                        if (firstLine.startsWith('file:')) {
-                          fileMarker = '```' + firstLine + '\n';
+                      const nextLineStart = lineEnd + 1;
+                      const nextLineEnd = buffer.indexOf('\n', nextLineStart);
+
+                      const tokens = firstLine.split(/\s+/).filter(Boolean);
+                      const fileToken = tokens.find((token) =>
+                        token.startsWith('file:')
+                      );
+                      const isSimpleTag =
+                        tokens.length === 1 &&
+                        /^(file:[^\s]+|[a-zA-Z0-9_+-]+)$/.test(tokens[0]);
+
+                      let marker = '';
+                      let consumeLines = 0;
+
+                      if (fileToken || isSimpleTag) {
+                        marker =
+                          fileToken || (firstLine.startsWith('file:') ? firstLine : '');
+                        consumeLines = 1;
+                      } else if (firstLine === '' && nextLineEnd !== -1) {
+                        const nextLine = buffer.substring(nextLineStart, nextLineEnd).trim();
+                        if (nextLine.startsWith('file:')) {
+                          marker = nextLine;
+                          consumeLines = 2;
                         }
-                        buffer = buffer.substring(lineEnd + 1);
+                      } else if (firstLine === '' && nextLineEnd === -1) {
+                        pendingFileMarker = true;
+                      }
+
+                      if (marker) {
+                        // IMPORTANT: Preserve file markers for parseProjectOutput to detect multiple files
+                        fileMarker = '```' + marker + '\n';
+                      }
+
+                      if (consumeLines > 0) {
+                        const cutIndex =
+                          consumeLines === 1 ? lineEnd + 1 : nextLineEnd + 1;
+                        buffer = buffer.substring(cutIndex);
                       }
                     }
                     // Include the file marker in accumulated code for proper parsing
@@ -559,7 +587,19 @@ Each tag should be sent separately.`,
                     inCodeBlock = true;
                   } else {
                     // Ending code block - send as code-chunk event
-                    accumulatedCode += before;
+                    if (pendingFileMarker && before.includes('\n')) {
+                      const lineEnd = before.indexOf('\n');
+                      const firstLine = before.substring(0, lineEnd).trim();
+                      if (firstLine.startsWith('file:')) {
+                        accumulatedCode += '```' + firstLine + '\n';
+                        accumulatedCode += before.substring(lineEnd + 1);
+                      } else {
+                        accumulatedCode += before;
+                      }
+                      pendingFileMarker = false;
+                    } else {
+                      accumulatedCode += before;
+                    }
                     // Add closing backticks to complete the file block for parsing
                     accumulatedCode += '```\n';
                     controller.enqueue(
@@ -575,6 +615,15 @@ Each tag should be sent separately.`,
 
                 // Stream code or text
                 if (inCodeBlock) {
+                  if (pendingFileMarker && buffer.includes('\n')) {
+                    const lineEnd = buffer.indexOf('\n');
+                    const firstLine = buffer.substring(0, lineEnd).trim();
+                    if (firstLine.startsWith('file:')) {
+                      accumulatedCode += '```' + firstLine + '\n';
+                      buffer = buffer.substring(lineEnd + 1);
+                    }
+                    pendingFileMarker = false;
+                  }
                   if (buffer.length > 20 || buffer.includes('\n')) {
                     accumulatedCode += buffer;
                     controller.enqueue(

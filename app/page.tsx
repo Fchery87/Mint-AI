@@ -284,12 +284,24 @@ export default function Home() {
                 // Update code preview
                 streamedCode += data.content;
                 accumulatedCode += data.content;
-                setComponentCode(streamedCode);
+                
+                // Only update component code periodically to avoid render storms
+                // Update when we have newlines (natural break points)
+                if (data.content.includes('\n') || streamedCode.endsWith('\n')) {
+                  setComponentCode(streamedCode);
+                }
 
-                // Try to parse incrementally for project mode
-                const parsed = parseProjectOutput(accumulatedCode);
-                if (parsed.type === "project" && parsed.files.length > 0) {
-                  setProjectOutput(parsed);
+                // Only try to parse project output when we have complete file blocks
+                // (i.e., when accumulatedCode contains closing backticks for files)
+                const hasCompleteFiles = 
+                  accumulatedCode.includes('```file:') && 
+                  (accumulatedCode.match(/```/g) || []).length >= 2;
+                
+                if (hasCompleteFiles) {
+                  const parsed = parseProjectOutput(accumulatedCode);
+                  if (parsed.type === "project" && parsed.files.length > 0) {
+                    setProjectOutput(parsed);
+                  }
                 }
                 break;
                 

@@ -86,7 +86,9 @@ export const PromptInputSpeechButton = ({ textareaRef, className }: PromptInputS
         recognitionInstance.stop();
       }
     };
-  }, [isSupported, controller.textInput, textareaRef]);
+    // Only depend on isSupported - controller and textareaRef are stable refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSupported]);
 
   const toggleListening = useCallback(() => {
     if (!recognition) return;
