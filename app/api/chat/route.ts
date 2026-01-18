@@ -8,6 +8,7 @@ import { getActiveProvider, type LLMProvider } from '@/lib/providers';
 import { trackUsage } from '@/lib/cost-tracking';
 import { detectIntent, buildSkillContext } from '@/lib/skills/classifier';
 import { SkillType } from '@/types/skill';
+import { sanitizeErrorForLogging, getSafeErrorMessage } from '@/lib/security';
 
 // SSE helper: Format event with proper named event syntax for EventSource
 function sseEvent(eventType: string, data: Record<string, unknown>): string {
@@ -34,12 +35,15 @@ function getOpenAIClient() {
   return { client: openaiClient, provider };
 }
 
-// Request validation schema
+// Request validation schema with size limits
+const MAX_MESSAGE_LENGTH = 5000;
+const MAX_REQUEST_SIZE = 1024 * 1024; // 1MB limit
+
 const chatRequestSchema = z.object({
   message: z
     .string()
     .min(1, 'Message cannot be empty')
-    .max(5000, 'Message too long (max 5000 characters)'),
+    .max(MAX_MESSAGE_LENGTH, `Message too long (max ${MAX_MESSAGE_LENGTH} characters)`),
   chatId: z.string().optional(),
   outputFormat: z.string().optional(),
   mode: z.enum(['agent', 'ask']).optional(),
@@ -112,11 +116,41 @@ async function getWebSearchContext(query: string): Promise<{
   };
 }
 
-// Simple in-memory chat history storage
+// Simple in-memory chat history storage with TTL
 const chatHistories = new Map<
   string,
-  Array<{ role: 'user' | 'assistant' | 'system'; content: string }>
+  { history: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>; expiresAt: number }
 >();
+
+const CHAT_HISTORY_TTL = 24 * 60 * 60 * 1000; // 24 hours
+const MAX_HISTORIES = 1000; // Max concurrent chats to prevent memory exhaustion
+const CLEANUP_INTERVAL = 5 * 60 * 1000; // 5 minutes
+
+// Cleanup expired chat histories
+function cleanupExpiredChats() {
+  const now = Date.now();
+  for (const [id, data] of chatHistories.entries()) {
+    if (now > data.expiresAt) {
+      chatHistories.delete(id);
+    }
+  }
+}
+
+// Run cleanup periodically
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    cleanupExpiredChats();
+    // Also limit total histories if over capacity (oldest first)
+    if (chatHistories.size > MAX_HISTORIES) {
+      const entries = Array.from(chatHistories.entries())
+        .sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+      const toRemove = entries.slice(0, chatHistories.size - MAX_HISTORIES);
+      for (const [id] of toRemove) {
+        chatHistories.delete(id);
+      }
+    }
+  }, CLEANUP_INTERVAL);
+}
 
 function generateChatId(): string {
   return `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -170,10 +204,22 @@ export function splitReasoningForStreaming(
 }
 
 export async function POST(req: NextRequest): Promise<Response> {
+  // Check Content-Length for request size limits
+  const contentLength = req.headers.get('content-length');
+  if (contentLength) {
+    const sizeInBytes = parseInt(contentLength, 10);
+    if (sizeInBytes > MAX_REQUEST_SIZE) {
+      return NextResponse.json(
+        { error: 'Request too large. Maximum size is 1MB.' },
+        { status: 413 }
+      );
+    }
+  }
+
   try {
     // Rate limiting: 10 requests per minute per IP
     const clientIp = getClientIp(req);
-    const rateLimit = checkRateLimit(clientIp, 10, 60000);
+    const rateLimit = await checkRateLimit(clientIp, 10, 60000);
 
     if (!rateLimit.allowed) {
       return NextResponse.json(
@@ -227,7 +273,7 @@ export async function POST(req: NextRequest): Promise<Response> {
 
     // Get or create chat history
     const currentChatId = chatId || generateChatId();
-    let history = chatHistories.get(currentChatId) || [];
+    let history = chatHistories.get(currentChatId)?.history || [];
 
     // Add user message to history
     history.push({
@@ -339,7 +385,7 @@ Each tag should be sent separately.`,
       } catch (e) {
         Sentry.captureException(e, {
           tags: { source: 'web-search' },
-          extra: { provider: provider.name },
+          extra: { provider: provider.name, error: sanitizeErrorForLogging(e) },
         });
       }
     }
@@ -734,7 +780,10 @@ Each tag should be sent separately.`,
             role: 'assistant',
             content: fullResponse,
           });
-          chatHistories.set(currentChatId, history);
+          chatHistories.set(currentChatId, {
+            history,
+            expiresAt: Date.now() + CHAT_HISTORY_TTL,
+          });
 
           // Track usage and calculate cost
           if (usageData) {
@@ -769,19 +818,16 @@ Each tag should be sent separately.`,
           );
           controller.close();
         } catch (error) {
-          // Log to Sentry
+          // Log to Sentry with sanitized error
           Sentry.captureException(error, {
             tags: { source: 'chat-stream' },
-            extra: { chatId: currentChatId },
+            extra: { chatId: currentChatId, error: sanitizeErrorForLogging(error) },
           });
 
           controller.enqueue(
             encoder.encode(
               sseEvent('error', {
-                error:
-                  error instanceof Error
-                    ? error.message
-                    : 'Stream error occurred',
+                error: getSafeErrorMessage(error),
               }),
             ),
           );
@@ -799,20 +845,21 @@ Each tag should be sent separately.`,
       },
     });
   } catch (error) {
-    console.error('Chat error:', error);
+    // Safe console logging without exposing API keys
+    console.error('Chat error:', JSON.stringify(sanitizeErrorForLogging(error), null, 2));
 
-    // Log to Sentry
+    // Log to Sentry with sanitized error
     Sentry.captureException(error, {
       tags: { source: 'chat-api' },
       extra: {
         clientIp: getClientIp(req),
+        error: sanitizeErrorForLogging(error),
       },
     });
 
     return NextResponse.json(
       {
-        error:
-          error instanceof Error ? error.message : 'Failed to process message',
+        error: getSafeErrorMessage(error),
       },
       { status: 500 },
     );

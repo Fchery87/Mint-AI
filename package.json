@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/ioredis": "^5.0.0",
+    "ioredis": "^5.9.2"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"

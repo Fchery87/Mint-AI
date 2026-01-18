@@ -12,7 +12,7 @@ const config: NextConfig = {
           // CORS Headers
           {
             key: 'Access-Control-Allow-Origin',
-            value: process.env.ALLOWED_ORIGINS || '*', // Configure in production
+            value: process.env.ALLOWED_ORIGINS || 'http://localhost:3000',
           },
           {
             key: 'Access-Control-Allow-Methods',

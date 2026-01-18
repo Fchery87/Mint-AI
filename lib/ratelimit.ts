@@ -1,6 +1,6 @@
 /**
- * Simple in-memory rate limiting
- * For production, use Redis or Upstash for distributed rate limiting
+ * Rate limiting with optional Redis support for distributed deployments
+ * Falls back to in-memory storage when REDIS_URL is not available
  */
 
 interface RateLimitRecord {
@@ -22,6 +22,33 @@ if (typeof setInterval !== "undefined") {
   }, 5 * 60 * 1000);
 }
 
+// Redis client for distributed rate limiting (lazy initialization)
+let redisClient: any = null;
+
+async function getRedisClient() {
+  if (redisClient) return redisClient;
+
+  const redisUrl = process.env.REDIS_URL;
+  if (!redisUrl) return null;
+
+  try {
+    const ioredis = await import('ioredis').then((m) => m.default).catch(() => null);
+    if (!ioredis) return null;
+    redisClient = new ioredis(redisUrl, {
+      maxRetriesPerRequest: 1,
+      enableReadyCheck: false,
+      lazyConnect: true,
+    });
+    await redisClient.connect().catch(() => {
+      redisClient = null;
+    });
+  } catch {
+    redisClient = null;
+  }
+
+  return redisClient;
+}
+
 export interface RateLimitResult {
   allowed: boolean;
   remaining: number;
@@ -30,19 +57,38 @@ export interface RateLimitResult {
 
 /**
  * Check if a request should be rate limited
- * @param identifier - Unique identifier (IP address, user ID, etc.)
- * @param limit - Maximum requests allowed in the window
- * @param windowMs - Time window in milliseconds (default: 1 minute)
+ * Uses Redis for distributed deployments when REDIS_URL is set
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   identifier: string,
   limit = 10,
   windowMs = 60000
-): RateLimitResult {
+): Promise<RateLimitResult> {
   const now = Date.now();
+  const key = `ratelimit:${identifier}`;
+
+  const redis = await getRedisClient();
+  if (redis) {
+    try {
+      const pipeline = redis.pipeline();
+      pipeline.incr(key);
+      pipeline.expire(key, Math.ceil(windowMs / 1000));
+      const results = await pipeline.exec();
+
+      const count = results?.[0]?.[1] as number ?? 1;
+
+      return {
+        allowed: count <= limit,
+        remaining: Math.max(0, limit - count),
+        resetAt: now + windowMs,
+      };
+    } catch {
+      // Fall through to in-memory on Redis error
+    }
+  }
+
   const record = requestCounts.get(identifier);
 
-  // No previous record or window expired
   if (!record || now > record.resetAt) {
     const resetAt = now + windowMs;
     requestCounts.set(identifier, { count: 1, resetAt });
@@ -53,7 +99,6 @@ export function checkRateLimit(
     };
   }
 
-  // Check if limit exceeded
   if (record.count >= limit) {
     return {
       allowed: false,
@@ -62,7 +107,6 @@ export function checkRateLimit(
     };
   }
 
-  // Increment count
   record.count++;
   return {
     allowed: true,
@@ -71,11 +115,7 @@ export function checkRateLimit(
   };
 }
 
-/**
- * Get client IP address from request
- */
 export function getClientIp(request: Request): string {
-  // Try to get real IP from common headers
   const forwarded = request.headers.get("x-forwarded-for");
   if (forwarded) {
     return forwarded.split(",")[0].trim();
@@ -86,13 +126,9 @@ export function getClientIp(request: Request): string {
     return realIp.trim();
   }
 
-  // Fallback to a default (this won't work well in production)
   return "unknown";
 }
 
-/**
- * Format seconds until reset
- */
 export function formatRetryAfter(resetAt: number): number {
   return Math.ceil((resetAt - Date.now()) / 1000);
 }
