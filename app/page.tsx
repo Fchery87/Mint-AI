@@ -291,13 +291,13 @@ export default function Home() {
                   setComponentCode(streamedCode);
                 }
 
-                // Only try to parse project output when we have complete file blocks
-                // (i.e., when accumulatedCode contains closing backticks for files)
+                // Parse project output when we have fenced files or inline file markers
                 const hasCompleteFiles = 
                   accumulatedCode.includes('```file:') && 
                   (accumulatedCode.match(/```/g) || []).length >= 2;
+                const hasInlineFileMarkers = /(^|\n)file:[^\s]+/.test(accumulatedCode);
                 
-                if (hasCompleteFiles) {
+                if (hasCompleteFiles || hasInlineFileMarkers) {
                   const parsed = parseProjectOutput(accumulatedCode);
                   if (parsed.type === "project" && parsed.files.length > 0) {
                     setProjectOutput(parsed);
