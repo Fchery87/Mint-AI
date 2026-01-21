@@ -56,7 +56,7 @@ export default function Home() {
   const [sessionCost, setSessionCost] = useState<{ cost: string; tokens: string } | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
   const [draftWorkspace, setDraftWorkspace] = useState<WorkspaceState | null>(null);
-  const [agentMode, setAgentMode] = useState<"agent" | "ask">("agent");
+  const [interactionMode, setInteractionMode] = useState<"plan" | "build">("build");
   const [webSearch, setWebSearch] = useState(false);
   const [activeSkill, setActiveSkill] = useState<{ type: SkillType; stage: string; confidence?: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -124,8 +124,8 @@ export default function Home() {
     const assistantIndex = messages.length + 1;
     setMessages((prev) => [...prev, { role: "assistant", content: "", reasoning: "" }]);
 
-    // Safety: checkpoint current workspace before generation overwrite (Agent mode)
-    if (agentMode === "agent" && workspace) {
+    // Safety: checkpoint current workspace before generation overwrite (Build mode)
+    if (interactionMode === "build" && workspace) {
       setWorkspace((prev) => {
         if (!prev) return prev;
         const label = `Before generation (${new Date().toLocaleString()})`;
@@ -143,7 +143,7 @@ export default function Home() {
         message,
         chatId,
         outputFormat: detectedLanguage, // Use detected language directly, not state
-        mode: agentMode,
+        mode: interactionMode,
         webSearch,
       };
 
@@ -319,7 +319,7 @@ export default function Home() {
                   setProjectOutput(parsedOutput);
 
                   // Commit to workspace in Agent mode
-                  if (agentMode === "agent") {
+                  if (interactionMode === "build") {
                     setWorkspace((prev) => {
                       const next = workspaceFromProjectOutput(parsedOutput);
                       if (prev?.checkpoints?.length) {
@@ -361,7 +361,7 @@ export default function Home() {
                   });
                 }
 
-                if (agentMode === "ask" || !hasCode) {
+                if (interactionMode === "plan" || !hasCode) {
                   toast.success("Answer ready!");
                 } else {
                   const parsedFinal = parseProjectOutput(data.code);
@@ -401,8 +401,8 @@ export default function Home() {
     <main className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
       <Header
         sessionCost={sessionCost}
-        agentMode={agentMode}
-        setAgentMode={setAgentMode}
+        mode={interactionMode}
+        setMode={setInteractionMode}
         webSearch={webSearch}
         setWebSearch={setWebSearch}
         outputFormat={outputFormat}

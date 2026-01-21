@@ -43,21 +43,30 @@ const chatRequestSchema = z.object({
   message: z
     .string()
     .min(1, 'Message cannot be empty')
-    .max(MAX_MESSAGE_LENGTH, `Message too long (max ${MAX_MESSAGE_LENGTH} characters)`),
+    .max(
+      MAX_MESSAGE_LENGTH,
+      `Message too long (max ${MAX_MESSAGE_LENGTH} characters)`,
+    ),
   chatId: z.string().optional(),
   outputFormat: z.string().optional(),
-  mode: z.enum(['agent', 'ask']).optional(),
+  mode: z.enum(['plan', 'build']).optional(),
   webSearch: z.boolean().optional(),
   forceSkill: z.string().optional(), // Optional: force a specific skill
+  // Plan context for Build mode
+  planId: z.string().optional(),
+  currentStepIndex: z.number().optional(),
 });
 
 export interface ChatRequest {
   message: string;
   chatId?: string;
   outputFormat?: OutputFormat;
-  mode?: 'agent' | 'ask';
+  mode?: 'plan' | 'build';
   webSearch?: boolean;
   forceSkill?: string;
+  // Plan context for Build mode
+  planId?: string;
+  currentStepIndex?: number;
 }
 
 export interface ChatResponse {
@@ -119,7 +128,10 @@ async function getWebSearchContext(query: string): Promise<{
 // Simple in-memory chat history storage with TTL
 const chatHistories = new Map<
   string,
-  { history: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>; expiresAt: number }
+  {
+    history: Array<{ role: 'user' | 'assistant' | 'system'; content: string }>;
+    expiresAt: number;
+  }
 >();
 
 const CHAT_HISTORY_TTL = 24 * 60 * 60 * 1000; // 24 hours
@@ -142,8 +154,9 @@ if (typeof setInterval !== 'undefined') {
     cleanupExpiredChats();
     // Also limit total histories if over capacity (oldest first)
     if (chatHistories.size > MAX_HISTORIES) {
-      const entries = Array.from(chatHistories.entries())
-        .sort((a, b) => a[1].expiresAt - b[1].expiresAt);
+      const entries = Array.from(chatHistories.entries()).sort(
+        (a, b) => a[1].expiresAt - b[1].expiresAt,
+      );
       const toRemove = entries.slice(0, chatHistories.size - MAX_HISTORIES);
       for (const [id] of toRemove) {
         chatHistories.delete(id);
@@ -211,7 +224,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     if (sizeInBytes > MAX_REQUEST_SIZE) {
       return NextResponse.json(
         { error: 'Request too large. Maximum size is 1MB.' },
-        { status: 413 }
+        { status: 413 },
       );
     }
   }
@@ -262,7 +275,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     const { message, chatId } = validationResult.data;
     const outputFormat: OutputFormat =
       validationResult.data.outputFormat || 'React';
-    const mode: 'agent' | 'ask' = validationResult.data.mode || 'agent';
+    const mode: 'plan' | 'build' = validationResult.data.mode || 'build';
     const webSearchRequested: boolean = Boolean(
       validationResult.data.webSearch,
     );
@@ -594,7 +607,7 @@ Each tag should be sent separately.`,
 
                       const tokens = firstLine.split(/\s+/).filter(Boolean);
                       const fileToken = tokens.find((token) =>
-                        token.startsWith('file:')
+                        token.startsWith('file:'),
                       );
                       const isSimpleTag =
                         tokens.length === 1 &&
@@ -605,10 +618,13 @@ Each tag should be sent separately.`,
 
                       if (fileToken || isSimpleTag) {
                         marker =
-                          fileToken || (firstLine.startsWith('file:') ? firstLine : '');
+                          fileToken ||
+                          (firstLine.startsWith('file:') ? firstLine : '');
                         consumeLines = 1;
                       } else if (firstLine === '' && nextLineEnd !== -1) {
-                        const nextLine = buffer.substring(nextLineStart, nextLineEnd).trim();
+                        const nextLine = buffer
+                          .substring(nextLineStart, nextLineEnd)
+                          .trim();
                         if (nextLine.startsWith('file:')) {
                           marker = nextLine;
                           consumeLines = 2;
@@ -821,7 +837,10 @@ Each tag should be sent separately.`,
           // Log to Sentry with sanitized error
           Sentry.captureException(error, {
             tags: { source: 'chat-stream' },
-            extra: { chatId: currentChatId, error: sanitizeErrorForLogging(error) },
+            extra: {
+              chatId: currentChatId,
+              error: sanitizeErrorForLogging(error),
+            },
           });
 
           controller.enqueue(
@@ -846,7 +865,10 @@ Each tag should be sent separately.`,
     });
   } catch (error) {
     // Safe console logging without exposing API keys
-    console.error('Chat error:', JSON.stringify(sanitizeErrorForLogging(error), null, 2));
+    console.error(
+      'Chat error:',
+      JSON.stringify(sanitizeErrorForLogging(error), null, 2),
+    );
 
     // Log to Sentry with sanitized error
     Sentry.captureException(error, {

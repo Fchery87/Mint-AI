@@ -1,26 +1,32 @@
 "use client";
 
-import { Terminal } from "lucide-react";
+import { Terminal, ClipboardList, Hammer, Search } from "lucide-react";
 import { motion } from "framer-motion";
 import { Logo } from "@/components/ui/logo";
 import { ModeToggle } from "@/components/mode-toggle";
 
 interface HeaderProps {
   sessionCost: { cost: string; tokens: string } | null;
-  agentMode: "agent" | "ask";
-  setAgentMode: (mode: "agent" | "ask") => void;
+  // New Plan/Build mode props
+  mode: "plan" | "build";
+  setMode: (mode: "plan" | "build") => void;
   webSearch: boolean;
   setWebSearch: (value: boolean) => void;
   outputFormat: string;
+  // Optional status info
+  statusLabel?: string;
+  isSearching?: boolean;
 }
 
 export function Header({
   sessionCost,
-  agentMode,
-  setAgentMode,
+  mode,
+  setMode,
   webSearch,
   setWebSearch,
   outputFormat,
+  statusLabel,
+  isSearching = false,
 }: HeaderProps) {
   return (
     <motion.header
@@ -38,43 +44,63 @@ export function Header({
             <span>{sessionCost.tokens} · {sessionCost.cost}</span>
           </div>
         )}
-        <div className="hidden lg:flex items-center gap-2 px-2 py-1 bg-muted/50 rounded-full text-xs font-medium">
+
+        {/* New Plan/Build mode toggle */}
+        <div className="hidden lg:flex items-center gap-1 p-1 bg-muted/50 rounded-full">
           <button
-            onClick={() => setAgentMode("ask")}
-            className={`px-3 py-1 rounded-full transition-colors ${
-              agentMode === "ask"
-                ? "bg-background text-foreground"
-                : "text-muted-foreground hover:text-foreground"
+            onClick={() => setMode("plan")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              mode === "plan"
+                ? "bg-purple-500/20 text-purple-600 dark:text-purple-400 shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
             }`}
-            title="Ask mode (no workspace changes)"
+            title="Plan mode - Research and create a plan before building"
           >
-            Ask
+            <ClipboardList size={12} />
+            Plan
           </button>
           <button
-            onClick={() => setAgentMode("agent")}
-            className={`px-3 py-1 rounded-full transition-colors ${
-              agentMode === "agent"
-                ? "bg-background text-foreground"
-                : "text-muted-foreground hover:text-foreground"
+            onClick={() => setMode("build")}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+              mode === "build"
+                ? "bg-blue-500/20 text-blue-600 dark:text-blue-400 shadow-sm"
+                : "text-muted-foreground hover:text-foreground hover:bg-muted"
             }`}
-            title="Agent mode (updates workspace)"
+            title="Build mode - Execute and write code"
           >
-            Agent
+            <Hammer size={12} />
+            Build
           </button>
         </div>
-        <label className="hidden lg:flex items-center gap-2 px-3 py-1 bg-muted/50 rounded-full text-xs font-medium text-muted-foreground cursor-pointer">
+
+        {/* Status label if provided */}
+        {statusLabel && (
+          <div className="hidden xl:flex items-center gap-2 px-2 py-1 bg-muted/30 rounded-full text-xs text-muted-foreground">
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+            <span className="max-w-40 truncate">{statusLabel}</span>
+          </div>
+        )}
+
+        {/* Web Search Toggle */}
+        <label className="hidden lg:flex items-center gap-2 px-3 py-1 bg-muted/50 rounded-full text-xs font-medium text-muted-foreground cursor-pointer hover:bg-muted/70 transition-colors">
           <input
             type="checkbox"
             checked={webSearch}
             onChange={(e) => setWebSearch(e.target.checked)}
-            className="accent-primary"
+            className="accent-primary w-3 h-3"
           />
-          Web search
+          <Search size={12} className={isSearching ? "animate-pulse text-primary" : ""} />
+          <span className={isSearching ? "text-primary" : ""}>
+            {isSearching ? "Searching..." : "Web search"}
+          </span>
         </label>
+
+        {/* Output Format Indicator */}
         <div className="hidden md:flex items-center gap-2 px-3 py-1 bg-muted/50 rounded-full text-xs font-medium text-muted-foreground">
           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
           {outputFormat}
         </div>
+
         <ModeToggle />
       </div>
     </motion.header>

@@ -4,7 +4,64 @@ import { getPreviewType } from './preview-support';
 export type OutputFormat = string;
 
 export interface PromptOptions {
-  mode?: 'agent' | 'ask' | 'blueprint';
+  mode?: 'plan' | 'build';
+}
+
+/**
+ * Generate a system prompt tailored to the requested language/framework
+ */
+/**
+ * Get the system prompt for Plan mode - research and create structured plan
+ */
+export function getPlanModePrompt(): string {
+  return `You are Mint AI, an expert software architect and planner.
+
+Your role in PLAN MODE is to:
+1. **Research** - Understand the user's requirements thoroughly
+2. **Analyze** - Consider the technical approach and architecture
+3. **Question** - Ask clarifying questions if requirements are ambiguous
+4. **Plan** - Create a detailed, step-by-step implementation plan
+
+## Response Format
+
+Your response should follow this EXACT structure:
+
+### 1. Understanding Phase
+Use thinking tags to show your analysis:
+<thinking type="requirements">What the user is asking for - core requirements</thinking>
+<thinking type="constraints">Technical constraints, limitations, or considerations</thinking>
+<thinking type="approach">Your high-level strategy for implementation</thinking>
+
+### 2. Clarifying Questions (if needed)
+If you need more information before creating a plan, ask:
+<question required="true" id="q1">Your question here?</question>
+<question required="false" id="q2" options="Option A,Option B,Option C">Optional question with choices?</question>
+
+### 3. Implementation Plan
+Create a structured plan with numbered steps:
+
+<plan title="Brief title of what we're building">
+<step id="1" complexity="low" files="path/to/file.ts">Step title
+Step description explaining what will be done.
+</step>
+<step id="2" complexity="medium" files="path/to/file1.ts,path/to/file2.ts" depends="1">Another step
+Description of this step.
+</step>
+</plan>
+
+### 4. Summary
+Provide a brief summary and ask if the user wants to proceed with building.
+
+## Guidelines
+- Be thorough but concise
+- Break complex tasks into small, manageable steps
+- Identify file dependencies between steps
+- Estimate complexity: low (simple change), medium (moderate effort), high (complex)
+- Ask questions BEFORE creating the plan if unclear
+- Consider edge cases and error handling
+- Think about testing and verification
+
+Remember: In Plan mode, you do NOT write actual code. You create a roadmap for the Build phase.`;
 }
 
 /**
@@ -12,25 +69,21 @@ export interface PromptOptions {
  */
 export function getSystemPrompt(
   language: OutputFormat,
-  options: PromptOptions = {}
+  options: PromptOptions = {},
 ): string {
-  const mode = options.mode || 'agent';
+  const mode = options.mode || 'build';
   const previewType = getPreviewType(language);
+
+  // Plan mode has its own dedicated prompt
+  if (mode === 'plan') {
+    return getPlanModePrompt();
+  }
 
   // Build language-specific instructions
   const languageInstructions = getLanguageInstructions(language, previewType);
 
-  const responseFormat =
-    mode === 'ask'
-      ? `## Response Format (Ask Mode)
-Your response should have thinking blocks followed by your answer:
-
-1. **Thinking**: Use thinking tags to show your reasoning step by step:
-   <thinking type="understanding">Your understanding of the question</thinking>
-   <thinking type="approach">How you'll approach answering</thinking>
-
-2. **Answer**: A clear, direct answer.`
-      : `## Response Format
+  // Build mode uses the code generation prompt
+  const responseFormat = `## Response Format (Build Mode)
 Your response should have thinking blocks followed by explanation and code:
 
 1. **Thinking**: Use thinking tags to show your reasoning step by step:
@@ -44,15 +97,11 @@ Your response should have thinking blocks followed by explanation and code:
 
 3. **Code**: Use code blocks for file generation.`;
 
-  const rememberBlock =
-    mode === 'ask'
-      ? `Remember:
-- Use <thinking> tags for reasoning
-- Each thinking tag streams as a separate block`
-      : `Remember:
+  const rememberBlock = `Remember:
 - Use <thinking type="..."> tags for reasoning
 - Each thinking tag streams as a separate block
-- Finish all thinking BEFORE writing code`;
+- Finish all thinking BEFORE writing code
+- You are in BUILD mode - execute the plan and write actual code`;
 
   return `You are an expert software developer proficient in ALL programming languages and frameworks.
 
@@ -144,7 +193,7 @@ ${rememberBlock}`;
  */
 function getLanguageInstructions(
   language: string,
-  previewType: string
+  previewType: string,
 ): string {
   const lang = (language || '').toLowerCase().trim();
 
