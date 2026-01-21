@@ -14,13 +14,14 @@
 ├─────────────────────────────────────────────────────────────────────┤
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────────────┐   │
 │  │  Chat Panel  │◄──►│  Workspace   │◄──►│   Preview Panel      │   │
-│  │              │    │    Panel     │    │  (iframe srcDoc)     │   │
+│  │ (Enhanced)   │    │ (Plan/Build) │    │  (iframe srcDoc)     │   │
 │  └──────┬───────┘    └──────┬───────┘    └──────────────────────┘   │
 │         │                   │                                        │
 │         ▼                   ▼                                        │
 │  ┌──────────────────────────────────────────────────────────────┐   │
 │  │                    Next.js API Routes                         │   │
 │  │                    /api/chat/route.ts                         │   │
+│  │                    (Plan Parser & Executor)                   │   │
 │  └──────────────────────────┬───────────────────────────────────┘   │
 │                             │                                        │
 └─────────────────────────────┼────────────────────────────────────────┘
@@ -41,16 +42,21 @@
 
 ```
 app/
-├── page.tsx                 # Main orchestrator
-│   ├── ChatPanel            # User input + message history
-│   ├── WorkspacePanel       # Monaco Editor + File Tree
+├── page.tsx                 # Main orchestrator (Plan/Build state)
+│   ├── ChatPanel            # Enhanced User Input
+│   ├── WorkspacePanel       # Editor + File Tree + Plan/Build Panels
 │   └── PreviewPanel         # iframe srcDoc rendering
 │
 components/
-├── ChatPanel.tsx            # Message list + prompt input
-├── WorkspacePanel.tsx       # Editor + tabs + file operations
-├── HtmlPreview.tsx          # iframe srcDoc preview
-├── ReasoningBlock.tsx       # Collapsible reasoning display
+├── ChatPanel.tsx            # Message list + ChatInputEnhanced
+├── ChatInputEnhanced.tsx    # Mode-aware input with suggested actions
+├── WorkspacePanel.tsx       # Editor + tabs + conditional plan/build panels
+├── PlanPanel.tsx            # Implementation steps + clarifying questions
+├── BuildExecutionPanel.tsx  # Real-time build progress + execution controls
+├── DebugMode.tsx            # Hypothesis-driven troubleshooting UI
+├── DiffReviewModal.tsx      # Monaco diff review for pending changes
+├── WebSearchDisplay.tsx     # Structured search results from Exa
+├── ReasonBlock.tsx          # Collapsible reasoning display
 └── ResizablePanels.tsx      # Split-pane layout
 ```
 
@@ -66,8 +72,13 @@ app/api/
         └── Convex mutations        # Workspace persistence
 
 lib/
+├── contexts/
+│   └── PlanBuildContext.tsx # Global state provider for workflow
+├── hooks/
+│   └── usePlanBuild.ts      # Reducer-based workflow state hook
 ├── agent.ts                 # Tool execution (list_files, read_file, write_file)
-├── prompts.ts               # System prompt generation
+├── prompts.ts               # Plan/Build specific system prompts
+├── plan-parser.ts           # XML-tag parsing for structured plans
 ├── cost-tracking.ts         # Token usage calculation
 ├── preview-support.ts       # Language → preview type mapping
 └── project-types.ts         # Multi-file parsing
@@ -92,25 +103,29 @@ convex/
 ### 1. Chat Message Flow
 
 ```
-User Input
+User Input (Plan/Build/Debug)
     │
     ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ POST /api/chat                                              │
 ├─────────────────────────────────────────────────────────────┤
-│ 1. Rate limiting check                                      │
-│ 2. Validate request (Zod)                                   │
-│ 3. Fetch history from Convex (if workspaceId)               │
-│ 4. Optional: Web search via Exa                             │
-│ 5. Stream LLM response (OpenRouter)                         │
-│ 6. Parse tool calls → execute → re-prompt (up to 5x)        │
-│ 7. Extract code from response                               │
-│ 8. Upsert files to Convex                                   │
-│ 9. Return SSE stream                                        │
+│ 1. Context retrieval (Convex history + workspace)           │
+│ 2. Web search via Exa (if plan/debug mode)                  │
+│ 3. LLM streaming with mode-specific system prompts          │
+│ 4. Output parsing (xml-tags: <plan>, <step>, <question>)    │
+│ 5. Agent loop for tool execution (Build mode)               │
+│ 6. Visual Diff generation for pending changes               │
+│ 7. Checkpoint creation (automated before build)             │
+│ 8. SSE Push: chunks, plan-chunks, diff-chunks, status       │
 └─────────────────────────────────────────────────────────────┘
     │
     ▼
-Frontend receives: reasoning-chunk, chunk, code-chunk, done
+Frontend receives:
+- reasoning-chunk (AI thoughts)
+- plan-update (steps/questions)
+- build-status (execution progress)
+- file-diff (for review)
+- content-chunk (explanation)
 ```
 
 ### 2. File Persistence Flow
@@ -139,77 +154,34 @@ AI generates code
 
 ## Proposed Architecture Changes
 
-### 1. Reasoning Streaming Enhancement
+### 1. Visual Diff & Review Flow
 
-```
-Current:
-  LLM chunk → emit('chunk', content)
+[Implemented]
 
-Proposed:
-  LLM chunk → buffer
-           → if contains <reasoning> → emit('reasoning-chunk')
-           → if contains </reasoning> → emit('reasoning-complete')
-           → else → emit('explanation-chunk')
-```
+Before AI changes are applied to the workspace, the system generates a `pendingChange` object.
+The `DiffReviewModal` uses Monaco's `DiffEditor` to show side-by-side changes.
+User must explicitly "Accept" or "Accept All" to commit changes to Convex.
 
-### 2. Babel React Preview
+### 2. Automated Checkpointing
 
-```
-Current HtmlPreview:
-  ┌─────────────────┐
-  │ iframe          │
-  │ srcdoc = HTML   │ ← Only supports HTML/CSS/JS
-  └─────────────────┘
+[Implemented]
 
-Proposed ReactPreview:
-  ┌─────────────────────────────────────────────────────────┐
-  │ iframe                                                  │
-  │ srcdoc = {                                              │
-  │   <script src="babel-standalone">                       │
-  │   <script src="esm.sh/react">                           │
-  │   <script type="text/babel">                            │
-  │     // GENERATED_COMPONENT                              │
-  │     ReactDOM.createRoot(root).render(<Component />)     │
-  │   </script>                                             │
-  │ }                                                       │
-  └─────────────────────────────────────────────────────────┘
-```
+The system automatically creates a `WorkspaceCheckpoint` in Convex before starting any `build` execution.
+This includes:
 
-### 3. Visual Diff Architecture
+- Serialized state of all files
+- Chat message ID reference
+- Timestamp and description
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│ WorkspacePanel                                              │
-├─────────────────────────────────────────────────────────────┤
-│ ┌─────────────────────┐  ┌─────────────────────┐           │
-│ │ DiffEditor (Monaco) │  │ Actions             │           │
-│ │ ┌─────────┬────────┐│  │ ┌─────────────────┐ │           │
-│ │ │ Original│Proposed││  │ │ ✓ Accept All    │ │           │
-│ │ │         │        ││  │ │ ✗ Reject All    │ │           │
-│ │ │         │        ││  │ │ ↩ Accept File   │ │           │
-│ │ └─────────┴────────┘│  │ └─────────────────┘ │           │
-│ └─────────────────────┘  └─────────────────────┘           │
-└─────────────────────────────────────────────────────────────┘
-```
+### 3. Agentic Workflow (Plan/Build/Debug)
 
-### 4. Checkpoint System
+[Implemented]
 
-```
-Convex Schema Addition:
-  checkpoints: defineTable({
-    workspaceId: v.id('workspaces'),
-    messageId: v.id('messages'),    // Link to chat message
-    files: v.array(v.object({
-      path: v.string(),
-      content: v.string(),
-    })),
-    createdAt: v.number(),
-  })
+The architecture pivoted from a simple chat to a 3-mode engine:
 
-Flow:
-  Before AI edit → createCheckpoint(workspaceId, messageId, currentFiles)
-  User clicks Undo → restoreCheckpoint(checkpointId)
-```
+- **Plan Mode**: Focuses on research, spec generation, and human-in-the-loop clarification using `<question>` and `<step>` protocols.
+- **Build Mode**: Sequential execution of plans with real-time status reporting and pause/resume capabilities.
+- **Debug Mode**: Hypothesis-driven loop for troubleshooting runtime errors or logic bugs.
 
 ---
 

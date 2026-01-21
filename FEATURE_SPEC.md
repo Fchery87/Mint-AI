@@ -54,7 +54,9 @@ This specification details the proposed enhancements to the Mint AI platform bas
 
 ---
 
-### 2.3 Respect Ask Mode
+### 2.3 Transition to Plan Mode (Replacing Ask Mode)
+
+[Implemented]
 
 | Attribute    | Value                   |
 | ------------ | ----------------------- |
@@ -62,9 +64,10 @@ This specification details the proposed enhancements to the Mint AI platform bas
 | **Effort**   | Low (1-2 hours)         |
 | **Files**    | `app/api/chat/route.ts` |
 
-**Current State**: Files are upserted to Convex regardless of mode.
+**Action**: Legacy "Ask" mode has been replaced by a more robust "Plan" mode.
 
-**Action**: Skip `extractCodeFromResponse` and `upsertFile` calls when `mode === 'ask'`.
+- In Plan mode, code extraction and file upserts are skipped until the plan is approved.
+- Structured XML tags are used for planning.
 
 ---
 
@@ -118,24 +121,25 @@ This specification details the proposed enhancements to the Mint AI platform bas
 
 ### 4.1 Visual Diff Review
 
-| Attribute    | Value                                           |
-| ------------ | ----------------------------------------------- |
-| **Priority** | Medium                                          |
-| **Effort**   | High (8-12 hours)                               |
-| **Files**    | `components/WorkspacePanel.tsx` (new component) |
+[Implemented]
 
-**Description**: Before AI changes are committed to Convex, show a side-by-side diff view.
+| Attribute    | Value                            |
+| ------------ | -------------------------------- |
+| **Priority** | Medium                           |
+| **Effort**   | High (8-12 hours)                |
+| **Files**    | `components/DiffReviewModal.tsx` |
 
-**Requirements**:
+**Status**: Implemented using Monaco Diff Editor.
 
-1. Use Monaco Editor's `monaco.editor.createDiffEditor()`
-2. Show original file on left, proposed changes on right
-3. Add "Accept" and "Reject" buttons per file
-4. Batch accept/reject for multi-file changes
+- Side-by-side comparison of current vs proposed code.
+- "Accept", "Reject", and "Accept All" functionality.
+- Integrated into Build mode workflow.
 
 ---
 
-### 4.2 Spec-Driven Development Mode
+### 4.2 Plan-Driven Development Mode
+
+[Implemented]
 
 | Attribute    | Value                            |
 | ------------ | -------------------------------- |
@@ -143,18 +147,17 @@ This specification details the proposed enhancements to the Mint AI platform bas
 | **Effort**   | High (12-16 hours)               |
 | **Files**    | `app/page.tsx`, `lib/prompts.ts` |
 
-**Description**: Add a "Blueprint" mode where the AI generates a technical specification before writing code.
+**Status**: Implemented as "Plan Mode".
 
-**Workflow**:
-
-1. User describes feature
-2. AI generates `SPEC.md` with requirements, file structure, and approach
-3. User reviews and approves/edits spec
-4. AI implements code based ONLY on the approved spec
+- AI acts as an architect, providing steps and clarifying questions.
+- User review required before any build starts.
+- Structured response parsing for non-linear execution.
 
 ---
 
-### 4.3 Git-Style Checkpointing
+### 4.3 Automated Checkpointing
+
+[Implemented]
 
 | Attribute    | Value                                  |
 | ------------ | -------------------------------------- |
@@ -162,14 +165,10 @@ This specification details the proposed enhancements to the Mint AI platform bas
 | **Effort**   | Medium (6-8 hours)                     |
 | **Files**    | `convex/workspaces.ts`, `app/page.tsx` |
 
-**Description**: Auto-create checkpoints before AI edits for easy rollback.
+**Status**: Implemented automated checkpoints.
 
-**Requirements**:
-
-1. Create checkpoint in Convex before each `upsertFile` batch
-2. Link checkpoint to chat message ID
-3. Add "Undo" button next to each assistant message
-4. Restore all files to checkpoint state on undo
+- Checkpoints created automatically before major file batches in Build mode.
+- Rollback functionality integrated into workspace management.
 
 ---
 

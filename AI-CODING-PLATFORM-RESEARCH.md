@@ -10,13 +10,15 @@
 
 | Feature             | Status | Description                                            |
 | ------------------- | ------ | ------------------------------------------------------ |
-| Chat Interface      | ✅     | Split-screen chat with streaming responses             |
-| Multi-File Projects | ✅     | Generates project structures via `file:` markers       |
+| Chat Interface      | ✅     | Enhanced split-screen with Plan/Build/Debug modes      |
+| Multi-File Projects | ✅     | Full lifecycle: Plan → Review → Build → Verify         |
 | Code Preview        | ✅     | Live preview for React/HTML/Vue components             |
-| Reasoning Display   | ✅     | Shows AI thought process via `<reasoning>` tags        |
+| Reasoning Display   | ✅     | Real-time thinking display during research and coding  |
 | Multi-Language      | ✅     | Supports Python, Rust, Go, Java, C++, TypeScript, etc. |
 | Cost Tracking       | ✅     | Token/cost visibility per session                      |
-| Dark Mode           | ✅     | Theme toggle support                                   |
+| Visual Diff Review  | ✅     | Modal for reviewing and accepting code changes         |
+| Web Search Results  | ✅     | Structured display of citations and search context     |
+| Debug Mode          | ✅     | Hypothesis-driven troubleshooting workflow             |
 
 ### Key Architecture Components
 
@@ -37,18 +39,18 @@ lib/
 
 ## 🎯 Competitor Feature Matrix
 
-| Feature                | Claude Code      | Codex             | Cursor       | Replit        | Mint AI             |
-| ---------------------- | ---------------- | ----------------- | ------------ | ------------- | ------------------- |
-| **IDE Integration**    | VS Code, CLI     | VS Code, CLI, Web | Native IDE   | Web IDE       | ❌ Web only         |
-| **Code Execution**     | Terminal sandbox | Cloud sandbox     | Local        | WebContainers | ❌ Preview only     |
-| **Git Integration**    | Auto-commits     | Auto-commits      | Native       | Native        | ❌ Missing          |
-| **File System Access** | Full project     | Full project      | Full project | Full project  | ❌ Generated only   |
-| **Web Search**         | ✅               | ✅                | ✅           | ❌            | ❌ Missing          |
-| **MCP Support**        | ✅ Native        | ✅                | ✅           | ❌            | ❌ Missing          |
-| **Multi-File Editing** | ✅               | ✅                | ✅           | ✅            | ⚠️ Generation only  |
-| **Code Review**        | ✅               | ✅                | ✅           | ✅            | ❌ Missing          |
-| **Test Execution**     | ✅               | ✅                | ✅           | ✅            | ❌ Missing          |
-| **Collaboration**      | ❌               | ❌                | ❌           | ✅ Real-time  | ❌ Missing          |
+| Feature                | Claude Code      | Codex             | Cursor       | Replit        | Mint AI                   |
+| ---------------------- | ---------------- | ----------------- | ------------ | ------------- | ------------------------- |
+| **IDE Integration**    | VS Code, CLI     | VS Code, CLI, Web | Native IDE   | Web IDE       | ❌ Web only               |
+| **Code Execution**     | Terminal sandbox | Cloud sandbox     | Local        | WebContainers | ❌ Preview only           |
+| **Git Integration**    | Auto-commits     | Auto-commits      | Native       | Native        | ⚠️ Snapshots only         |
+| **File System Access** | Full project     | Full project      | Full project | Full project  | ⚠️ Virtual FS             |
+| **Web Search**         | ✅               | ✅                | ✅           | ❌            | ✅ Implemented            |
+| **MCP Support**        | ✅ Native        | ✅                | ✅           | ❌            | ❌ Missing                |
+| **Multi-File Editing** | ✅               | ✅                | ✅           | ✅            | ✅ Plan/Build Flow        |
+| **Code Review**        | ✅               | ✅                | ✅           | ✅            | ✅ Visual Diff            |
+| **Test Execution**     | ✅               | ✅                | ✅           | ✅            | ❌ Missing                |
+| **Collaboration**      | ❌               | ❌                | ❌           | ✅ Real-time  | ❌ Missing                |
 | **Project Memory**     | CLAUDE.md        | Codex context     | .cursorrules | .replit       | ✅ .mintrules + CLAUDE.md |
 
 ---
