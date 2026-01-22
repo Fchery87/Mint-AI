@@ -8,7 +8,7 @@ import ChatPanel from "@/components/ChatPanel";
 import WorkspacePanel from "@/components/WorkspacePanel";
 import { ResizablePanels } from "@/components/ResizablePanels";
 import type { ChatRequest } from "./api/chat/route";
-import { Header } from "@/components/Header";
+import { Header } from "@/components/HeaderPlanBuild";
 import { parseProjectOutput, type ProjectOutput } from "@/lib/project-types";
 import { detectLanguage } from "@/lib/language-detection";
 import { checkCodeQuality, formatQualityReport } from "@/lib/code-quality-check";
@@ -26,6 +26,8 @@ import {
 import { unifiedDiffForFiles } from "@/lib/diff";
 import { downloadProjectAsZip, downloadTextFile } from "@/lib/download";
 import { SkillType } from "@/types/skill";
+import { usePlanBuildContext } from "@/lib/contexts/PlanBuildContext";
+import { parsePlanResponse } from "@/lib/plan-parser";
 
 interface ThinkingItem {
   content: string;
@@ -47,6 +49,24 @@ interface ChatMessage {
 type OutputFormat = string; // Any language/framework
 
 export default function Home() {
+  // Plan/Build context
+  const planBuildContext = usePlanBuildContext();
+  const { 
+    mode, 
+    currentPlan, 
+    setPlan, 
+    approvePlan, 
+    startBuild,
+    pauseBuild,
+    resumeBuild,
+    statusLabel,
+    canStartBuild,
+    isBuilding,
+    isPaused,
+    hasUnansweredQuestions,
+  } = planBuildContext;
+
+  // Local state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [chatId, setChatId] = useState<string | undefined>();
@@ -57,7 +77,6 @@ export default function Home() {
   const [sessionCost, setSessionCost] = useState<{ cost: string; tokens: string } | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
   const [draftWorkspace, setDraftWorkspace] = useState<WorkspaceState | null>(null);
-  const [interactionMode, setInteractionMode] = useState<"plan" | "build">("build");
   const [webSearch, setWebSearch] = useState(false);
   const [activeSkill, setActiveSkill] = useState<{ type: SkillType; stage: string; confidence?: number } | null>(null);
   const [pendingChanges, setPendingChanges] = useState<Record<string, PendingChange>>({});
@@ -127,7 +146,7 @@ export default function Home() {
     setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     // Safety: checkpoint current workspace before generation overwrite (Build mode)
-    if (interactionMode === "build" && workspace) {
+    if (mode === "build" && workspace) {
       setWorkspace((prev) => {
         if (!prev) return prev;
         const label = `Before generation (${new Date().toLocaleString()})`;
@@ -145,7 +164,7 @@ export default function Home() {
         message,
         chatId,
         outputFormat: detectedLanguage, // Use detected language directly, not state
-        mode: interactionMode,
+        mode,
         webSearch,
       };
 
@@ -320,8 +339,8 @@ export default function Home() {
                   const parsedOutput = parseProjectOutput(data.code);
                   setProjectOutput(parsedOutput);
 
-                  // Commit to workspace in Agent mode
-                  if (interactionMode === "build") {
+                  // Commit to workspace in Build mode
+                  if (mode === "build") {
                     setWorkspace((prev) => {
                       const next = workspaceFromProjectOutput(parsedOutput);
                       if (prev?.checkpoints?.length) {
@@ -330,6 +349,26 @@ export default function Home() {
                       return next;
                     });
                   }
+                }
+                
+                // Parse plan in Plan mode
+                if (mode === "plan" && streamedExplanation) {
+                  const parsedPlan = parsePlanResponse(streamedExplanation, currentPlan);
+                  setPlan(parsedPlan);
+                }
+
+                // Quality check
+                if (hasCode) {
+                  const qualityReport = checkCodeQuality(data.code, detectedLanguage);
+                  if (!qualityReport.passed) {
+                    const formattedReport = formatQualityReport(qualityReport);
+                    console.warn("Code quality issues:", formattedReport);
+                  }
+                }
+
+                // Session cost
+                if (data.cost && data.tokens) {
+                  setSessionCost({ cost: data.cost, tokens: data.tokens });
                 }
 
                 // Update message with skill info
@@ -342,32 +381,6 @@ export default function Home() {
                     };
                     return updated;
                   });
-                }
-
-                // Run quality check (development mode only)
-                if (process.env.NODE_ENV === 'development') {
-                  const qualityResult = checkCodeQuality(data.code || "", detectedLanguage);
-                  console.log('=== Code Quality Check ===');
-                  console.log(formatQualityReport(qualityResult));
-
-                  if (!qualityResult.passed) {
-                    console.warn('⚠️ Code quality issues detected. See report above.');
-                  }
-                }
-
-                // Update session cost if available
-                if (data.usage) {
-                  setSessionCost({
-                    cost: data.usage.cost,
-                    tokens: data.usage.tokens,
-                  });
-                }
-
-                if (interactionMode === "plan" || !hasCode) {
-                  toast.success("Answer ready!");
-                } else {
-                  const parsedFinal = parseProjectOutput(data.code);
-                  toast.success(parsedFinal.type === "project" ? "Project generated!" : "Component generated!");
                 }
                 break;
               }
@@ -486,8 +499,15 @@ export default function Home() {
     <main className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
       <Header
         sessionCost={sessionCost}
-        mode={interactionMode}
-        setMode={setInteractionMode}
+        mode={mode}
+        planStatus={currentPlan?.status || null}
+        buildStatus={currentPlan?.buildStatus || null}
+        progress={currentPlan?.progress || 0}
+        statusLabel={statusLabel}
+        isBuilding={isBuilding}
+        isPaused={isPaused}
+        onPauseBuild={pauseBuild}
+        onResumeBuild={resumeBuild}
         webSearch={webSearch}
         setWebSearch={setWebSearch}
         outputFormat={outputFormat}

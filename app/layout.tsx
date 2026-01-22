@@ -6,6 +6,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
+import { PlanBuildProvider } from "@/lib/contexts/PlanBuildContext";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
@@ -34,7 +35,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <ConvexClientProvider>
-            <ErrorBoundary>{children}</ErrorBoundary>
+            <PlanBuildProvider>
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </PlanBuildProvider>
           </ConvexClientProvider>
           <Toaster />
         </ThemeProvider>
