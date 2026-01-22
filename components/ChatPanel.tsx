@@ -1,9 +1,6 @@
 import { useRef } from "react";
-import { cn } from "@/lib/utils";
-import { motion } from "framer-motion";
 import { Logo } from "@/components/ui/logo";
-import { ThinkingBlock } from "@/components/ThinkingBlock";
-import { SkillBadge, SkillThinkingIndicator } from "@/components/SkillBadge";
+import { MessageItem, type ChatMessage, type ThinkingItem } from "@/components/MessageItem";
 import {
   PromptInputProvider,
   PromptInput,
@@ -23,25 +20,11 @@ import {
 } from "@/components/prompt-input";
 import { SkillType } from "@/types/skill";
 
-interface ThinkingItem {
-  content: string;
-  thinkingType: string;
-  isComplete: boolean;
-}
-
-interface Message {
-  role: string;
-  content: string;
-  thinking?: ThinkingItem[];
-  toolResults?: string;
-  skill?: {
-    type: SkillType;
-    stage: string;
-  };
-}
+// Re-export types for consumers
+export type { ChatMessage, ThinkingItem };
 
 interface ChatPanelProps {
-  messages: Message[];
+  messages: ChatMessage[];
   isLoading: boolean;
   onSendMessage: (message: string) => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
@@ -74,7 +57,7 @@ export default function ChatPanel({
   return (
     <div className="flex flex-col h-full">
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-3">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center p-4">
             <div className="max-w-sm w-full space-y-8">
@@ -113,77 +96,14 @@ export default function ChatPanel({
         ) : (
           <>
             {messages.map((msg, idx) => (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
+              <MessageItem
                 key={idx}
-                className={cn(
-                  "flex flex-col w-full gap-2",
-                  msg.role === "user" ? "items-end" : "items-start"
-                )}
-              >
-                {/* Thinking Blocks (for assistant messages with thinking) */}
-                {msg.role === "assistant" && msg.thinking && msg.thinking.map((thinking, tIdx) => (
-                  <ThinkingBlock
-                    key={tIdx}
-                    content={thinking.content}
-                    thinkingType={thinking.thinkingType}
-                    isStreaming={idx === messages.length - 1 && !thinking.isComplete}
-                    isComplete={thinking.isComplete}
-                    className="w-full max-w-[85%]"
-                  />
-                ))}
-                
-                {/* Tool Results */}
-                {msg.role === "assistant" && msg.toolResults && (
-                  <div className="w-full max-w-[85%] bg-zinc-900/50 rounded-xl p-3 border border-zinc-500/10 font-mono text-[11px] text-zinc-400 mt-1">
-                    <div className="flex items-center gap-2 text-zinc-500 mb-2 border-b border-zinc-500/10 pb-1">
-                      <div className="w-2 h-2 rounded-full bg-zinc-600" />
-                      <span>Workspace Action Result</span>
-                    </div>
-                    <pre className="whitespace-pre-wrap">{msg.toolResults.trim()}</pre>
-                  </div>
-                )}
-                
-                {/* Message Content */}
-                {(msg.content || msg.role === "user") && (
-                  <div
-                    className={cn(
-                      "max-w-[85%] px-4 py-3 rounded-2xl text-sm leading-relaxed",
-                      msg.role === "user"
-                        ? "bg-primary text-primary-foreground rounded-br-sm shadow-md shadow-primary/10"
-                        : "bg-muted text-foreground rounded-bl-sm"
-                    )}
-                  >
-                    {msg.content}
-                  </div>
-                )}
-
-                {/* Skill Badge for assistant messages */}
-                {msg.role === "assistant" && msg.skill && (
-                  <div className="ml-1">
-                    <SkillBadge skill={msg.skill} size="sm" showStage={false} />
-                  </div>
-                )}
-              </motion.div>
+                message={msg}
+                isLatest={idx === messages.length - 1}
+                isStreaming={isLoading}
+                activeSkill={activeSkill}
+              />
             ))}
-            {isLoading && !messages[messages.length - 1]?.content && (!messages[messages.length - 1]?.thinking || messages[messages.length - 1]?.thinking?.length === 0) && (
-              <motion.div 
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex flex-col items-start gap-2"
-              >
-                {activeSkill ? (
-                  <SkillThinkingIndicator skill={activeSkill} />
-                ) : (
-                  <div className="bg-muted px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce" />
-                    <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce [animation-delay:0.1s]" />
-                    <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce [animation-delay:0.2s]" />
-                  </div>
-                )}
-              </motion.div>
-            )}
             <div ref={messagesEndRef} />
           </>
         )}

@@ -12,7 +12,7 @@ import { Header } from "@/components/Header";
 import { parseProjectOutput, type ProjectOutput } from "@/lib/project-types";
 import { detectLanguage } from "@/lib/language-detection";
 import { checkCodeQuality, formatQualityReport } from "@/lib/code-quality-check";
-import type { WorkspaceState } from "@/lib/workspace";
+import type { WorkspaceState, PendingChange } from "@/lib/workspace";
 import {
   createCheckpoint,
   workspaceFromProjectOutput,
@@ -34,7 +34,7 @@ interface ThinkingItem {
 }
 
 interface ChatMessage {
-  role: string;
+  role: 'user' | 'assistant';
   content: string;
   thinking?: ThinkingItem[];
   skill?: {
@@ -42,6 +42,7 @@ interface ChatMessage {
     stage: string;
   };
 }
+
 
 type OutputFormat = string; // Any language/framework
 
@@ -59,6 +60,7 @@ export default function Home() {
   const [interactionMode, setInteractionMode] = useState<"plan" | "build">("build");
   const [webSearch, setWebSearch] = useState(false);
   const [activeSkill, setActiveSkill] = useState<{ type: SkillType; stage: string; confidence?: number } | null>(null);
+  const [pendingChanges, setPendingChanges] = useState<Record<string, PendingChange>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -122,7 +124,7 @@ export default function Home() {
 
     // Add placeholder for assistant message (will be updated as stream arrives)
     const assistantIndex = messages.length + 1;
-    setMessages((prev) => [...prev, { role: "assistant", content: "", reasoning: "" }]);
+    setMessages((prev) => [...prev, { role: "assistant", content: "" }]);
 
     // Safety: checkpoint current workspace before generation overwrite (Build mode)
     if (interactionMode === "build" && workspace) {
@@ -397,6 +399,89 @@ export default function Home() {
   const displayWorkspace = workspace || draftWorkspace;
   const displayReadOnly = !workspace;
 
+  // Pending changes handlers
+  const handleAcceptPendingChange = (path: string) => {
+    const change = pendingChanges[path];
+    if (!change) return;
+    
+    setWorkspace((prev) => {
+      if (!prev) {
+        // Create new workspace from pending change
+        return workspaceFromSingleFile(change.content, change.language, path);
+      }
+      return {
+        ...prev,
+        files: { ...prev.files, [path]: change.content },
+        updatedAt: Date.now(),
+      };
+    });
+    
+    setPendingChanges((prev) => {
+      const updated = { ...prev };
+      delete updated[path];
+      return updated;
+    });
+    toast.success(`Accepted changes to ${path}`);
+  };
+
+  const handleRejectPendingChange = (path: string) => {
+    setPendingChanges((prev) => {
+      const updated = { ...prev };
+      delete updated[path];
+      return updated;
+    });
+    toast.success(`Rejected changes to ${path}`);
+  };
+
+  const handleAcceptAllPendingChanges = () => {
+    if (Object.keys(pendingChanges).length === 0) return;
+    
+    setWorkspace((prev) => {
+      const newFiles: Record<string, string> = {};
+      for (const [path, change] of Object.entries(pendingChanges)) {
+        newFiles[path] = change.content;
+      }
+      
+      if (!prev) {
+        // Create new workspace from pending changes
+        const firstPath = Object.keys(newFiles)[0];
+        return {
+          version: 1 as const,
+          mode: Object.keys(newFiles).length > 1 ? 'project' as const : 'single' as const,
+          projectName: 'project',
+          activePath: firstPath,
+          files: newFiles,
+          baseFiles: { ...newFiles },
+          checkpoints: [],
+          updatedAt: Date.now(),
+        };
+      }
+      
+      return {
+        ...prev,
+        files: { ...prev.files, ...newFiles },
+        updatedAt: Date.now(),
+      };
+    });
+    
+    setPendingChanges({});
+    toast.success('Accepted all pending changes');
+  };
+
+  const handleRejectAllPendingChanges = () => {
+    setPendingChanges({});
+    toast.success('Rejected all pending changes');
+  };
+
+  const handleOpenDiffModal = (path: string) => {
+    // TODO: Implement diff modal component - for now, switch to the file in diff view
+    if (workspace) {
+      setWorkspace((prev) => (prev ? { ...prev, activePath: path } : prev));
+    } else {
+      setDraftWorkspace((prev) => (prev ? { ...prev, activePath: path } : prev));
+    }
+  };
+
   return (
     <main className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
       <Header
@@ -558,6 +643,12 @@ export default function Home() {
                     downloadTextFile(patch, name, "text/x-diff;charset=utf-8");
                     toast.success(`Downloaded ${name}`);
                   }}
+                  pendingChanges={pendingChanges}
+                  onAcceptPendingChange={handleAcceptPendingChange}
+                  onRejectPendingChange={handleRejectPendingChange}
+                  onAcceptAllPendingChanges={handleAcceptAllPendingChanges}
+                  onRejectAllPendingChanges={handleRejectAllPendingChanges}
+                  onOpenDiffModal={handleOpenDiffModal}
                 />
               </div>
             </motion.div>

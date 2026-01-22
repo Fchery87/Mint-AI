@@ -15,16 +15,18 @@ import {
 import { useTheme } from "next-themes";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import type { WorkspaceState } from "@/lib/workspace";
+import type { WorkspaceState, PendingChange } from "@/lib/workspace";
 import { getLanguageForPath, workspaceToProjectFiles } from "@/lib/workspace";
 import { buildFileTree } from "@/lib/project-types";
 import FileTree from "@/components/FileTree";
 import { PreviewRouter } from "@/components/PreviewRouter";
+import { ChangesetReview } from "@/components/ChangesetReview";
 import { unifiedDiffForFile } from "@/lib/diff";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import Editor from "@monaco-editor/react";
+
 
 type Tab = "preview" | "editor" | "diff";
 
@@ -32,6 +34,7 @@ interface WorkspacePanelProps {
   workspace: WorkspaceState | null;
   isStreaming?: boolean;
   readOnly?: boolean;
+  pendingChanges?: Record<string, PendingChange>;
   onSelectPath: (path: string) => void;
   onUpdateFile: (path: string, content: string) => void;
   onResetWorkspace: () => void;
@@ -41,12 +44,18 @@ interface WorkspacePanelProps {
   onRestoreCheckpoint: (checkpointId: string) => void;
   onDownloadZip: () => void;
   onDownloadPatch: () => void;
+  onAcceptPendingChange?: (path: string) => void;
+  onRejectPendingChange?: (path: string) => void;
+  onAcceptAllPendingChanges?: () => void;
+  onRejectAllPendingChanges?: () => void;
+  onOpenDiffModal?: (path: string) => void;
 }
 
 export default function WorkspacePanel({
   workspace,
   isStreaming = false,
   readOnly = false,
+  pendingChanges = {},
   onSelectPath,
   onUpdateFile,
   onResetWorkspace,
@@ -56,6 +65,11 @@ export default function WorkspacePanel({
   onRestoreCheckpoint,
   onDownloadZip,
   onDownloadPatch,
+  onAcceptPendingChange,
+  onRejectPendingChange,
+  onAcceptAllPendingChanges,
+  onRejectAllPendingChanges,
+  onOpenDiffModal,
 }: WorkspacePanelProps) {
   const [activeTab, setActiveTab] = useState<Tab>("preview");
   const [actionsOpen, setActionsOpen] = useState(false);
@@ -311,6 +325,20 @@ export default function WorkspacePanel({
                 onSelectFile={onSelectPath}
               />
             </div>
+            
+            {/* Pending Changes Section */}
+            {Object.keys(pendingChanges).length > 0 && onAcceptPendingChange && onRejectPendingChange && (
+              <div className="border-t border-border/40 p-2">
+                <ChangesetReview
+                  pendingChanges={pendingChanges}
+                  onAcceptAll={onAcceptAllPendingChanges || (() => {})}
+                  onRejectAll={onRejectAllPendingChanges || (() => {})}
+                  onAcceptFile={onAcceptPendingChange}
+                  onRejectFile={onRejectPendingChange}
+                  onOpenDiffModal={onOpenDiffModal || (() => {})}
+                />
+              </div>
+            )}
           </div>
         )}
 
