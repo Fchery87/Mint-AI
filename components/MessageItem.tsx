@@ -6,6 +6,7 @@ import { ThinkingBlock } from '@/components/ThinkingBlock';
 import { SkillBadge, SkillThinkingIndicator } from '@/components/SkillBadge';
 import { PlanContentRenderer } from '@/components/PlanContentRenderer';
 import { SkillType } from '@/types/skill';
+import { PlanStatus } from '@/types/plan-build';
 import { CheckCircle, Loader2, Terminal, FileCode, Search, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
@@ -42,6 +43,12 @@ interface MessageItemProps {
   isLatest: boolean;
   isStreaming: boolean;
   activeSkill?: { type: SkillType; stage: string; confidence?: number } | null;
+  // Plan approval props
+  planStatus?: PlanStatus;
+  canStartBuild?: boolean;
+  hasUnansweredQuestions?: boolean;
+  onApprovePlan?: () => void;
+  onReviewPlan?: () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,7 +146,17 @@ function ToolResultsBlock({ results }: { results: string }) {
 // Main MessageItem Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function MessageItem({ message, isLatest, isStreaming, activeSkill }: MessageItemProps) {
+export function MessageItem({
+  message,
+  isLatest,
+  isStreaming,
+  activeSkill,
+  planStatus,
+  canStartBuild,
+  hasUnansweredQuestions,
+  onApprovePlan,
+  onReviewPlan,
+}: MessageItemProps) {
   const isUser = message.role === 'user';
   const hasThinking = message.thinking && message.thinking.length > 0;
   const hasTools = message.tools && message.tools.length > 0;
@@ -204,7 +221,14 @@ export function MessageItem({ message, isLatest, isStreaming, activeSkill }: Mes
       {/* Message Content */}
       {message.content && (
         <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-bl-sm bg-muted text-foreground text-sm leading-relaxed">
-          <PlanContentRenderer content={message.content} />
+          <PlanContentRenderer
+            content={message.content}
+            planStatus={planStatus}
+            canStartBuild={canStartBuild}
+            hasUnansweredQuestions={hasUnansweredQuestions}
+            onApprovePlan={onApprovePlan}
+            onReviewPlan={onReviewPlan}
+          />
         </div>
       )}
 

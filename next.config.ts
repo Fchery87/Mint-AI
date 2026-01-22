@@ -66,6 +66,7 @@ const config: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com",
               "img-src 'self' data: https: blob:",
               "font-src 'self' data:",
+              "worker-src 'self' blob:", // Allow web workers from blob URLs (Monaco Editor)
               "connect-src 'self' https://api.anthropic.com https://openrouter.ai https://*.sentry.io https://cdn.jsdelivr.net https://unpkg.com https://sandpack-bundler.codesandbox.io https://*.codesandbox.io wss://sandpack-bundler.codesandbox.io wss://*.codesandbox.io https://*.convex.cloud wss://*.convex.cloud",
               "frame-src 'self' blob: https://sandpack-bundler.codesandbox.io https://*.codesandbox.io",
               "object-src 'none'",

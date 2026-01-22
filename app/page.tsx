@@ -28,6 +28,7 @@ import { downloadProjectAsZip, downloadTextFile } from "@/lib/download";
 import { SkillType } from "@/types/skill";
 import { usePlanBuildContext } from "@/lib/contexts/PlanBuildContext";
 import { parsePlanResponse } from "@/lib/plan-parser";
+import { PlanReviewModal } from "@/components/PlanReviewModal";
 
 interface ThinkingItem {
   content: string;
@@ -80,6 +81,7 @@ export default function Home() {
   const [webSearch, setWebSearch] = useState(false);
   const [activeSkill, setActiveSkill] = useState<{ type: SkillType; stage: string; confidence?: number } | null>(null);
   const [pendingChanges, setPendingChanges] = useState<Record<string, PendingChange>>({});
+  const [showPlanReviewModal, setShowPlanReviewModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -125,6 +127,28 @@ export default function Home() {
     setDraftWorkspace(null);
   }, [workspace, projectOutput, componentCode, outputFormat]);
 
+  // Plan approval handlers
+  const handleApprovePlan = () => {
+    approvePlan();
+    startBuild();
+
+    // Automatically start build execution with the approved plan
+    if (currentPlan) {
+      const buildMessage = `Execute the approved plan: "${currentPlan.title}"
+
+The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: ${currentPlan.steps[0]?.title || 'First step'}`;
+
+      // Send the build initiation message
+      setTimeout(() => {
+        handleSendMessage(buildMessage);
+      }, 100);
+    }
+  };
+
+  const handleReviewPlan = () => {
+    setShowPlanReviewModal(true);
+  };
+
   const handleSendMessage = async (message: string) => {
     if (!message.trim()) return;
 
@@ -166,6 +190,13 @@ export default function Home() {
         outputFormat: detectedLanguage, // Use detected language directly, not state
         mode,
         webSearch,
+        // Include plan data when in build mode
+        ...(mode === "build" && currentPlan
+          ? {
+              planId: currentPlan.id,
+              currentStepIndex: currentPlan.currentStepIndex,
+            }
+          : {}),
       };
 
       const response = await fetch("/api/chat", {
@@ -343,9 +374,20 @@ export default function Home() {
                   if (mode === "build") {
                     setWorkspace((prev) => {
                       const next = workspaceFromProjectOutput(parsedOutput);
-                      if (prev?.checkpoints?.length) {
-                        next.checkpoints = prev.checkpoints;
+
+                      // If we have a previous workspace, merge files instead of replacing
+                      if (prev) {
+                        return {
+                          ...prev,
+                          files: { ...prev.files, ...next.files }, // Merge new files with existing
+                          baseFiles: prev.baseFiles || next.baseFiles, // Keep original baseFiles
+                          projectName: next.projectName || prev.projectName, // Prefer new project name
+                          checkpoints: prev.checkpoints, // Preserve checkpoints
+                          updatedAt: Date.now(),
+                        };
                       }
+
+                      // First time - use new workspace as-is
                       return next;
                     });
                   }
@@ -534,6 +576,11 @@ export default function Home() {
                 messagesEndRef={messagesEndRef}
                 status={inputStatus}
                 activeSkill={activeSkill}
+                planStatus={currentPlan?.status}
+                canStartBuild={canStartBuild}
+                hasUnansweredQuestions={hasUnansweredQuestions}
+                onApprovePlan={handleApprovePlan}
+                onReviewPlan={handleReviewPlan}
               />
             </motion.div>
           }
@@ -675,6 +722,18 @@ export default function Home() {
           }
         />
       </div>
+
+      {/* Plan Review Modal */}
+      <PlanReviewModal
+        isOpen={showPlanReviewModal}
+        plan={currentPlan}
+        onClose={() => setShowPlanReviewModal(false)}
+        onApprove={handleApprovePlan}
+        onSave={(updatedPlan) => {
+          setPlan(updatedPlan);
+          setShowPlanReviewModal(false);
+        }}
+      />
     </main>
   );
 }

@@ -303,7 +303,8 @@ export function PlanBuildProvider({ children }: { children: ReactNode }) {
   // Computed values
   const canStartBuild = useMemo(() => {
     if (!state.currentPlan) return false;
-    if (!state.currentPlan.userApproved) return false;
+    // Plan must be in READY status to be approved
+    if (state.currentPlan.status !== PlanStatus.READY) return false;
     if (state.currentPlan.steps.length === 0) return false;
     const unansweredRequired = state.currentPlan.clarifyingQuestions.filter(
       (q) => q.required && !q.answer

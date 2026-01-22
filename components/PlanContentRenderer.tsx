@@ -3,20 +3,22 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
-import { 
-  containsPlanElements, 
-  extractQuestions, 
-  parsePlanTag 
+import {
+  containsPlanElements,
+  extractQuestions,
+  parsePlanTag
 } from '@/lib/plan-parser';
 import type { ClarifyingQuestion, PlanStep } from '@/types/plan-build';
-import { 
-  HelpCircle, 
-  CheckCircle2, 
-  FileCode, 
-  Zap, 
+import { PlanStatus } from '@/types/plan-build';
+import {
+  HelpCircle,
+  CheckCircle2,
+  FileCode,
+  Zap,
   ListOrdered,
   Target,
-  Lightbulb
+  Lightbulb,
+  PencilLine
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -288,9 +290,23 @@ function getSectionIcon(title: string): React.ReactNode {
 interface PlanContentRendererProps {
   content: string;
   className?: string;
+  // Plan approval props
+  planStatus?: PlanStatus;
+  canStartBuild?: boolean;
+  hasUnansweredQuestions?: boolean;
+  onApprovePlan?: () => void;
+  onReviewPlan?: () => void;
 }
 
-export function PlanContentRenderer({ content, className }: PlanContentRendererProps) {
+export function PlanContentRenderer({
+  content,
+  className,
+  planStatus,
+  canStartBuild,
+  hasUnansweredQuestions,
+  onApprovePlan,
+  onReviewPlan,
+}: PlanContentRendererProps) {
   const isPlanContent = useMemo(() => {
     return containsPlanElements(content) || content.includes('### 1.');
   }, [content]);
@@ -299,6 +315,27 @@ export function PlanContentRenderer({ content, className }: PlanContentRendererP
     if (!isPlanContent) return [];
     return parseContentBlocks(content);
   }, [content, isPlanContent]);
+
+  // Determine if we should show approval buttons
+  const showApprovalButtons = useMemo(() => {
+    // Must have plan content with steps
+    if (!isPlanContent || blocks.length === 0) return false;
+    const hasPlanSteps = blocks.some((block) => block.type === 'plan' && block.steps && block.steps.length > 0);
+    if (!hasPlanSteps) return false;
+
+    // Must be in READY status
+    if (planStatus !== PlanStatus.READY) return false;
+
+    // Must have both handlers
+    if (!onApprovePlan || !onReviewPlan) return false;
+
+    return true;
+  }, [isPlanContent, blocks, planStatus, onApprovePlan, onReviewPlan]);
+
+  const handleProceedToBuild = () => {
+    if (!onApprovePlan) return;
+    onApprovePlan();
+  };
 
   // If not plan content, render as plain text
   if (!isPlanContent) {
@@ -322,7 +359,7 @@ export function PlanContentRenderer({ content, className }: PlanContentRendererP
                 icon={getSectionIcon(block.sectionTitle!)}
               />
             );
-          
+
           case 'questions':
             return (
               <div key={i} className="space-y-2">
@@ -331,7 +368,7 @@ export function PlanContentRenderer({ content, className }: PlanContentRendererP
                 ))}
               </div>
             );
-          
+
           case 'plan':
             return (
               <div key={i} className="space-y-1">
@@ -350,21 +387,58 @@ export function PlanContentRenderer({ content, className }: PlanContentRendererP
                 </div>
               </div>
             );
-          
+
           case 'summary':
             return <SummaryBlock key={i} content={block.content!} />;
-          
+
           case 'text':
             return (
               <p key={i} className="text-sm text-muted-foreground leading-relaxed">
                 {block.content}
               </p>
             );
-          
+
           default:
             return null;
         }
       })}
+
+      {/* Approval Buttons */}
+      {showApprovalButtons && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="flex gap-3 justify-end pt-6 mt-4 border-t border-border/40"
+        >
+          <button
+            onClick={onReviewPlan}
+            className="group flex items-center gap-2 px-4 py-2.5 rounded-lg
+                       bg-muted/50 hover:bg-muted border border-border/50
+                       hover:border-border transition-all duration-200
+                       text-sm font-medium text-foreground"
+          >
+            <PencilLine className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+            Review Plan
+          </button>
+
+          <button
+            onClick={handleProceedToBuild}
+            disabled={!canStartBuild || hasUnansweredQuestions}
+            className="group flex items-center gap-2 px-5 py-2.5 rounded-lg
+                       bg-primary hover:bg-primary/90 disabled:bg-muted
+                       disabled:text-muted-foreground
+                       border border-primary/20 hover:border-primary/30
+                       shadow-lg shadow-primary/20 hover:shadow-primary/30
+                       transition-all duration-200
+                       text-sm font-semibold text-primary-foreground
+                       disabled:shadow-none disabled:border-border/50"
+          >
+            <Zap className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+            Proceed to Build
+          </button>
+        </motion.div>
+      )}
     </div>
   );
 }

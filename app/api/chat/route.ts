@@ -403,6 +403,23 @@ Each tag should be sent separately.`,
       }
     }
 
+    // Build mode: Add approved plan context
+    let planContext: string | null = null;
+    if (mode === 'build' && validationResult.data.planId) {
+      // TODO: Retrieve actual plan from storage/database
+      // For now, we'll rely on the client to send the full plan in the message
+      planContext = `You are now in BUILD MODE. Execute the approved plan step-by-step.
+
+IMPORTANT RULES:
+- Follow the plan exactly as specified
+- Complete each step before moving to the next
+- Generate files matching the specified paths
+- Report progress for each step
+- If you encounter issues, explain them clearly
+
+Current step index: ${validationResult.data.currentStepIndex || 0}`;
+    }
+
     // Call LLM API with streaming (include usage data)
     const stream = await client.chat.completions.create({
       model: provider.model,
@@ -410,6 +427,9 @@ Each tag should be sent separately.`,
         { role: 'system', content: systemPrompt },
         ...(webSearchContext
           ? [{ role: 'system', content: webSearchContext } as const]
+          : []),
+        ...(planContext
+          ? [{ role: 'system', content: planContext } as const]
           : []),
         ...history,
       ],

@@ -19,6 +19,7 @@ import {
   PromptInputMessage,
 } from "@/components/prompt-input";
 import { SkillType } from "@/types/skill";
+import { PlanStatus } from "@/types/plan-build";
 
 // Re-export types for consumers
 export type { ChatMessage, ThinkingItem };
@@ -34,6 +35,12 @@ interface ChatPanelProps {
     stage: string;
     confidence?: number;
   } | null;
+  // Plan approval props
+  planStatus?: PlanStatus;
+  canStartBuild?: boolean;
+  hasUnansweredQuestions?: boolean;
+  onApprovePlan?: () => void;
+  onReviewPlan?: () => void;
 }
 
 export default function ChatPanel({
@@ -42,6 +49,11 @@ export default function ChatPanel({
   onSendMessage,
   messagesEndRef,
   activeSkill,
+  planStatus,
+  canStartBuild,
+  hasUnansweredQuestions,
+  onApprovePlan,
+  onReviewPlan,
 }: ChatPanelProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -102,6 +114,11 @@ export default function ChatPanel({
                 isLatest={idx === messages.length - 1}
                 isStreaming={isLoading}
                 activeSkill={activeSkill}
+                planStatus={planStatus}
+                canStartBuild={canStartBuild}
+                hasUnansweredQuestions={hasUnansweredQuestions}
+                onApprovePlan={onApprovePlan}
+                onReviewPlan={onReviewPlan}
               />
             ))}
             <div ref={messagesEndRef} />
