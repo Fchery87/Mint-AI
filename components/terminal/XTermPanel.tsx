@@ -35,12 +35,14 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
     updateConfig,
     connect,
     setActiveSession,
+    ptyClient,
     ptyState,
   } = useTerminalContext();
 
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const isInitialMount = useRef(true);
   
   const [state, setState] = useState<TerminalState>({ isProcessing: false, isFullscreen: false });
   const [showConfig, setShowConfig] = useState(false);
@@ -78,7 +80,6 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
         foreground: '#e6edf3',
         cursor: '#58a6ff',
         cursorAccent: '#0d1117',
-        selection: '#264f7880',
         black: '#484f58',
         red: '#f85149',
         green: '#3fb950',
@@ -156,7 +157,6 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
         background: '#ffffff',
         foreground: '#1a1a1a',
         cursor: '#0066cc',
-        selection: '#0066cc40',
       };
     } else {
       xtermRef.current.options.theme = {
@@ -164,7 +164,6 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
         foreground: '#e6edf3',
         cursor: '#58a6ff',
         cursorAccent: '#0d1117',
-        selection: '#264f7880',
       };
     }
     
@@ -173,26 +172,39 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
 
   // Handle PTY output
   useEffect(() => {
-    if (!xtermRef.current) return;
+    const term = xtermRef.current;
+    if (!term) return;
 
     const unsubOutput = ptyClient.on('output', (msg: PtyMessage) => {
       if (msg.data && xtermRef.current) {
-        xtermRef.current.write(msg.data);
+        try {
+          xtermRef.current.write(msg.data);
+        } catch (err) {
+          console.error('Failed to write to terminal:', err);
+        }
       }
     });
 
     const unsubExit = ptyClient.on('exit', (msg: PtyMessage) => {
       if (msg.sessionId && xtermRef.current) {
-        xtermRef.current.writeln(`\r\n\x1b[31m[Process exited with code ${msg.code ?? 0}]\x1b[0m`);
-        xtermRef.current.write('\x1b[1;32m❯\x1b[0m ');
+        try {
+          xtermRef.current.writeln(`\r\n\x1b[31m[Process exited with code ${msg.code ?? 0}]\x1b[0m`);
+          xtermRef.current.write('\x1b[1;32m❯\x1b[0m ');
+        } catch (err) {
+          console.error('Failed to write exit message:', err);
+        }
       }
     });
 
     const unsubError = ptyClient.on('error', (msg: PtyMessage) => {
       if (msg.message && xtermRef.current) {
-        xtermRef.current.writeln(`\r\n\x1b[31mError: ${msg.message}\x1b[0m`);
-        xtermRef.current.write('\x1b[1;32m❯\x1b[0m ');
-        setConnectionError(msg.message);
+        try {
+          xtermRef.current.writeln(`\r\n\x1b[31mError: ${msg.message}\x1b[0m`);
+          xtermRef.current.write('\x1b[1;32m❯\x1b[0m ');
+          setConnectionError(msg.message);
+        } catch (err) {
+          console.error('Failed to write error message:', err);
+        }
       }
     });
 
@@ -203,27 +215,33 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
     };
   }, [ptyClient]);
 
-  // Auto-connect to PTY server (only once)
+  // Auto-connect to PTY server (only once on initial mount)
   useEffect(() => {
-    if (!ptyClient.connected && !ptyClient.connecting) {
+    // Only connect on initial mount, not during Fast Refresh
+    if (isInitialMount.current && !ptyClient.connected && !ptyClient.connecting) {
       connect();
+      isInitialMount.current = false;
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Run once on mount
+  }, []); // Run once on initial mount only
 
   // Handle PTY connection state changes
   useEffect(() => {
-    if (xtermRef.current) {
-      if (ptyClient.connected) {
-        xtermRef.current.writeln('\r\n\x1b[32m✓ Connected to PTY server\x1b[0m');
-        xtermRef.current.write('\x1b[1;32m❯\x1b[0m ');
-        setConnectionError(null);
-      } else if (!ptyClient.connecting) {
-        xtermRef.current.writeln('\r\n\x1b[33m⚠ PTY server disconnected. Attempting to reconnect...\x1b[0m');
+    const term = xtermRef.current;
+    if (term) {
+      try {
+        if (ptyClient.connected) {
+          term.writeln('\r\n\x1b[32m✓ Connected to PTY server\x1b[0m');
+          term.write('\x1b[1;32m❯\x1b[0m ');
+          setConnectionError(null);
+        } else if (!ptyClient.connecting) {
+          term.writeln('\r\n\x1b[33m⚠ PTY server disconnected. Attempting to reconnect...\x1b[0m');
+        }
+      } catch (err) {
+        console.error('Failed to write connection status:', err);
       }
     }
   }, [ptyClient.connected, ptyClient.connecting]);
-
   // Handle command input
   const handleCommand = useCallback(async (command: string) => {
     if (!xtermRef.current || !activeSessionId) return;
@@ -473,11 +491,11 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
         <div className="flex items-center gap-2">
           {/* Connection Status */}
           {ptyClient.connected ? (
-            <Wifi className="w-4 h-4 text-green-500" title="Connected to PTY server" />
+            <Wifi className="w-4 h-4 text-green-500" />
           ) : ptyClient.connecting ? (
-            <Wifi className="w-4 h-4 text-yellow-500 animate-pulse" title="Connecting..." />
+            <Wifi className="w-4 h-4 text-yellow-500 animate-pulse" />
           ) : (
-            <WifiOff className="w-4 h-4 text-red-500" title="Disconnected from PTY server" />
+            <WifiOff className="w-4 h-4 text-red-500" />
           )}
           
           {/* Processing indicator */}

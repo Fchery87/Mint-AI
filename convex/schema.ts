@@ -102,5 +102,6 @@ export default defineSchema({
     role: v.string(), // "owner", "editor", "viewer"
     addedAt: v.number(),
     addedBy: v.id('users'),
-  }).index('by_workspace', ['workspaceId']),
+  }).index('by_workspace', ['workspaceId'])
+    .index('by_user', ['userId']),
 });

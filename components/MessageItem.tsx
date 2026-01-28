@@ -5,10 +5,11 @@ import { cn } from '@/lib/utils';
 import { ThinkingBlock } from '@/components/ThinkingBlock';
 import { SkillBadge, SkillThinkingIndicator } from '@/components/SkillBadge';
 import { PlanContentRenderer } from '@/components/PlanContentRenderer';
+import { EnhancedMessageContent } from '@/components/EnhancedMessageContent';
 import { SkillType } from '@/types/skill';
 import { PlanStatus } from '@/types/plan-build';
 import { CheckCircle, Loader2, Terminal, FileCode, Search, ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { useState, memo, useMemo } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -49,6 +50,12 @@ interface MessageItemProps {
   hasUnansweredQuestions?: boolean;
   onApprovePlan?: () => void;
   onReviewPlan?: () => void;
+  // Enhanced code actions
+  onRunCode?: (code: string, language: string) => void;
+  onDiffCode?: (before: string, after: string) => void;
+  onApplyCode?: (code: string, filename?: string) => void;
+  onApplyArtifact?: (files: Array<{ path: string; code: string }>) => void;
+  onCopyCode?: (code: string) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -146,7 +153,7 @@ function ToolResultsBlock({ results }: { results: string }) {
 // Main MessageItem Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function MessageItem({
+function MessageItemComponent({
   message,
   isLatest,
   isStreaming,
@@ -156,12 +163,27 @@ export function MessageItem({
   hasUnansweredQuestions,
   onApprovePlan,
   onReviewPlan,
+  onRunCode,
+  onDiffCode,
+  onApplyCode,
+  onApplyArtifact,
+  onCopyCode,
 }: MessageItemProps) {
   const isUser = message.role === 'user';
   const hasThinking = message.thinking && message.thinking.length > 0;
   const hasTools = message.tools && message.tools.length > 0;
   const hasToolResults = Boolean(message.toolResults);
   const hasActivityTimeline = hasThinking || hasTools;
+
+  // Detect if this is plan content
+  const isPlanContent = useMemo(() => {
+    if (!message.content) return false;
+    return (
+      message.content.includes('### 1.') ||
+      message.content.includes('<plan') ||
+      message.content.includes('<question')
+    );
+  }, [message.content]);
 
   // User message
   if (isUser) {
@@ -221,14 +243,25 @@ export function MessageItem({
       {/* Message Content */}
       {message.content && (
         <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-bl-sm bg-muted text-foreground text-sm leading-relaxed">
-          <PlanContentRenderer
-            content={message.content}
-            planStatus={planStatus}
-            canStartBuild={canStartBuild}
-            hasUnansweredQuestions={hasUnansweredQuestions}
-            onApprovePlan={onApprovePlan}
-            onReviewPlan={onReviewPlan}
-          />
+          {isPlanContent ? (
+            <PlanContentRenderer
+              content={message.content}
+              planStatus={planStatus}
+              canStartBuild={canStartBuild}
+              hasUnansweredQuestions={hasUnansweredQuestions}
+              onApprovePlan={onApprovePlan}
+              onReviewPlan={onReviewPlan}
+            />
+          ) : (
+            <EnhancedMessageContent
+              content={message.content}
+              onRunCode={onRunCode}
+              onDiffCode={onDiffCode}
+              onApplyCode={onApplyCode}
+              onApplyArtifact={onApplyArtifact}
+              onCopyCode={onCopyCode}
+            />
+          )}
         </div>
       )}
 
@@ -257,4 +290,16 @@ export function MessageItem({
   );
 }
 
-export default MessageItem;
+// Memoize the component to prevent unnecessary re-renders
+export default memo(MessageItemComponent, (prevProps, nextProps) => {
+  // Only re-render if these props actually change
+  return (
+    prevProps.message === nextProps.message &&
+    prevProps.isLatest === nextProps.isLatest &&
+    prevProps.isStreaming === nextProps.isStreaming &&
+    prevProps.activeSkill === nextProps.activeSkill &&
+    prevProps.planStatus === nextProps.planStatus &&
+    prevProps.canStartBuild === nextProps.canStartBuild &&
+    prevProps.hasUnansweredQuestions === nextProps.hasUnansweredQuestions
+  );
+});

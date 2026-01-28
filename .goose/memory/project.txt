@@ -1,0 +1,120 @@
+# cyberpunk design-system layout-refactoring phase-3 progress
+Cyberpunk Design System Implementation - Phase 3 Progress
+
+Completed components:
+1. Header component (components/HeaderPlanBuild.tsx) - REFACTORED with cyberpunk styling
+   - Added GlitchText effect to logo with Cpu icon
+   - Replaced all Badge components with CyberBadge (terminal shape)
+   - Added cyber-grid background pattern
+   - Updated all buttons with cyber-chamfer-sm and neon glow effects
+   - Terminal aesthetic for mode indicators (Plan/Build)
+   - Progress bar with neon glow effects
+   - Web Search toggle with chamfered corners and neon transitions
+
+2. ClaudeLayout component (components/ClaudeLayout.tsx) - REFACTORED
+   - Added cyber-grid background to container
+   - Updated panel headers with cyberpunk styling (dots with neon glow)
+   - Enhanced resizers with color-coded neon glow (left=primary, center=secondary, right=tertiary)
+   - Added CyberBadge for terminal shell indicator
+   - Improved hover states with neon glow effects
+   - Chamfered corners on toggle buttons
+   - Terminal prompt labels (">" prefix)
+
+3. ChatPanel component (components/ChatPanel.tsx) - PARTIALLY REFACTORED
+   - Updated header with neon dots and terminal labels
+   - Added cyber-grid background to messages area
+   - Replaced logo with Cpu icon and neon glow
+   - Updated skill composer toggle with cyberpunk styling
+   - Empty state with cyberpunk aesthetic
+   - Suggestion buttons replaced with CyberButton components
+   - Input field with terminal prompt (">" prefix)
+   - Footer text with terminal styling
+
+4. FileExplorer component (components/FileExplorer.tsx) - PARTIALLY REFACTORED
+   - Added cyber-grid background
+   - Header section with FILE_SYSTEM label and file count badge
+   - Updated search input with terminal prompt styling
+   - File/Folder buttons with chamfered corners and neon glow
+   - File tree items with improved hover states and neon selection
+   - Stats footer with terminal styling
+   - Context menu with cyberpunk borders and styling
+
+All cyberpunk design tokens applied:
+- Neon glow shadows (primary, secondary, tertiary)
+- Chamfered corners (cyber-chamfer-sm, cyber-chamfer-md)
+- Terminal prompt class (">" prefix)
+- Uppercase with wide tracking (0.2em)
+- Monospace fonts throughout
+- Sharp transitions (100-150ms)
+- Circuit grid patterns (cyber-grid)
+- Color-coded glows for different sections
+
+# workspace-panel cyberpunk refactoring partial
+WorkspacePanel Cyberpunk Refactoring - COMPLETED
+
+Updates made to components/WorkspacePanel.tsx:
+
+1. IMPORTS - Updated:
+   - Code → Cpu icon
+   - FolderTree → HardDrive icon
+   - Added: CyberCard, CyberBadge, CyberButton from @/components/ui
+
+2. TOPBAR - Refactored:
+   - Tab switcher with cyber-chamfer-sm corners
+   - Tab labels: PREVIEW, EDITOR, DIFF (uppercase, monospace)
+   - File count badge with HardDrive icon + neon glow
+   - Active path badge with truncate styling
+   - Generating... badge with showDot + animate-pulse
+   - Actions button with chamfered corners + tertiary neon hover
+
+3. PENDING UPDATES (needed):
+   - Actions dropdown menu styling
+   - Empty state with Cpu icon + terminal styling
+   - File tree section header
+   - Editor header with CyberCard terminal variant
+   - Preview/Diff empty states with cyberpunk styling
+   - TabButton function with cyberpunk styling
+   - MenuItem function with chamfered corners
+
+4. KEY STYLING APPLIED:
+   - cyber-chamfer-sm for chamfered corners
+   - font-mono + uppercase + tracking-wider
+   - Neon glow shadows on hover
+   - Border colors: border-border/60
+   - Backgrounds: bg-muted/20, bg-muted/30
+   - Transitions: duration-fast
+
+5. COMPONENTS USED:
+   - CyberBadge (primary, outline variants)
+   - Sharp shape for badges
+   - ShowDot for generating indicator
+
+# critical-errors syntax-fix jsx-broken
+CRITICAL SYNTAX ERRORS - Need Immediate Fix:
+
+1. app/layout.tsx ✅ FIXED - Removed weight 700 from Share Tech Mono (only 400 available)
+
+2. components/HeaderPlanBuild.tsx - Line 143: Duplicate "{isPaused ? (" statement
+   - File appears to have OLD code (no cyberpunk updates applied yet)
+   - Need to check current state and fix
+
+3. components/ClaudeLayout.tsx - Line 263: JSX structure broken "Expected '</', got '{'"
+   - Unclosed component or wrong closing tag
+   - Need to identify the component with incorrect closing
+
+4. components/ChatPanel.tsx - Line 185: JSX structure broken
+   - Similar issue - unclosed component
+
+5. components/FileExplorer.tsx - Line 550: Multiple JSX issues
+   - "Expected '</', got 'jsx text'"
+   - Possibly unclosed div or component
+
+6. components/WorkspacePanel.tsx - Line 481: ">" character needs escaping
+   - Use {'>'} or &gt; instead of raw >
+
+7. components/ui/tooltip.tsx - Missing dependency @radix-ui/react-tooltip
+   - Need to install: npm install @radix-ui/react-tooltip
+
+ROOT CAUSE: My batch edits using str_replace created malformed JSX due to string matching issues.
+SOLUTION: Need to view each file, identify exact broken sections, and fix with precise edits.
+

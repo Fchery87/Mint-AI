@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, memo, useCallback } from "react";
 import {
   Code,
   Diff,
@@ -51,7 +51,7 @@ interface WorkspacePanelProps {
   onOpenDiffModal?: (path: string) => void;
 }
 
-export default function WorkspacePanel({
+function WorkspacePanelComponent({
   workspace,
   isStreaming = false,
   readOnly = false,
@@ -518,3 +518,13 @@ function MenuItem({
     </button>
   );
 }
+
+// Memoize the WorkspacePanel component
+export default memo(WorkspacePanelComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.workspace === nextProps.workspace &&
+    prevProps.isStreaming === nextProps.isStreaming &&
+    prevProps.readOnly === nextProps.readOnly &&
+    prevProps.pendingChanges === nextProps.pendingChanges
+  );
+});

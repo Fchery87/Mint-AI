@@ -1,12 +1,12 @@
 /**
  * Convex Authentication Utilities
- * 
+ *
  * This file provides helper functions to integrate Better Auth with Convex
  * for authentication and authorization in Convex queries and mutations.
  */
 
-import { QueryCtx, MutationCtx } from "./_generated/server";
-import { Id } from "./_generated/dataModel";
+import { QueryCtx, MutationCtx } from "../convex/_generated/server";
+import { Id } from "../convex/_generated/dataModel";
 
 /**
  * Get the authenticated user ID from the request context

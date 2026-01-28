@@ -39,39 +39,73 @@ export enum BuildStatus {
 }
 
 /**
+ * Status of an individual plan step
+ */
+export type PlanStepStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+
+/**
+ * Complexity estimate for a plan step
+ */
+export type StepComplexity = 'low' | 'medium' | 'high';
+
+/**
  * A single step in the execution plan
  */
 export interface PlanStep {
+  /** Unique step ID */
   id: string;
+  /** Step order/sequence number */
   order: number;
+  /** Step title */
   title: string;
+  /** Detailed step description */
   description: string;
-  status: 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
+  /** Current execution status */
+  status: PlanStepStatus;
+  /** Files that will be modified in this step */
   filesToModify?: string[];
+  /** Files that will be created in this step */
   filesToCreate?: string[];
-  estimatedComplexity?: 'low' | 'medium' | 'high';
-  dependencies?: string[]; // IDs of steps this depends on
-  output?: string; // Result or error message
+  /** Estimated complexity of the step */
+  estimatedComplexity?: StepComplexity;
+  /** IDs of steps this step depends on */
+  dependencies?: string[];
+  /** Result or error message from execution */
+  output?: string;
 }
 
 /**
- * Questions the AI needs answered before proceeding
+ * A clarifying question from the AI to the user
  */
 export interface ClarifyingQuestion {
+  /** Question ID */
   id: string;
+  /** The question text */
   question: string;
-  options?: string[]; // Suggested answers
+  /** Optional suggested answer options */
+  options?: string[];
+  /** Whether this question must be answered */
   required: boolean;
+  /** User's answer (if provided) */
   answer?: string;
 }
 
 /**
- * Files discovered or analyzed during planning
+ * Relevance level for analyzed files
+ */
+export type FileRelevance = 'high' | 'medium' | 'low';
+
+/**
+ * A file discovered or analyzed during planning
  */
 export interface AnalyzedFile {
+  /** File path */
   path: string;
-  relevance: 'high' | 'medium' | 'low';
+  /** Relevance to the current task */
+  relevance: FileRelevance;
+  /** Reason for relevance assessment */
   reason: string;
+  /** Whether this file will be modified */
   willModify: boolean;
 }
 
@@ -79,30 +113,39 @@ export interface AnalyzedFile {
  * The structured plan created in Plan Mode
  */
 export interface ExecutionPlan {
+  /** Unique plan ID */
   id: string;
+  /** Plan title */
   title: string;
+  /** Plan description */
   description: string;
+  /** Creation timestamp */
   createdAt: number;
+  /** Last update timestamp */
   updatedAt: number;
+  /** Current plan status */
   status: PlanStatus;
-
-  // Research phase outputs
+  /** Files analyzed during planning */
   analyzedFiles: AnalyzedFile[];
+  /** Context about the codebase */
   codebaseContext: string;
-
-  // Planning phase outputs
+  /** Steps in the execution plan */
   steps: PlanStep[];
+  /** Questions for the user */
   clarifyingQuestions: ClarifyingQuestion[];
-
-  // Execution tracking
+  /** Current step index during execution */
   currentStepIndex: number;
+  /** Current build status */
   buildStatus: BuildStatus;
-  progress: number; // 0-100
-  checkpointId?: string; // Reference to checkpoint created before build
-
-  // Metadata
+  /** Progress percentage (0-100) */
+  progress: number;
+  /** Reference to checkpoint created before build */
+  checkpointId?: string;
+  /** Whether the user has approved this plan */
   userApproved: boolean;
+  /** Whether the user has modified this plan */
   userModified: boolean;
+  /** Estimated duration for completion */
   estimatedDuration?: string;
 }
 
@@ -110,13 +153,17 @@ export interface ExecutionPlan {
  * State for the Plan/Build mode system
  */
 export interface PlanBuildState {
+  /** Current interaction mode */
   mode: InteractionMode;
+  /** Current active plan */
   currentPlan: ExecutionPlan | null;
+  /** History of plans */
   planHistory: ExecutionPlan[];
-
-  // UI state
+  /** Whether the plan is editable */
   isPlanEditable: boolean;
+  /** Whether to show diff preview */
   showDiffPreview: boolean;
+  /** Whether to auto-approve non-destructive changes */
   autoApproveNonDestructive: boolean;
 }
 

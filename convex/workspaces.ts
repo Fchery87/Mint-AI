@@ -185,7 +185,7 @@ export const listUserWorkspaces = query({
     // Get workspaces where user is a member (for future collaboration)
     const memberships = await ctx.db
       .query('workspaceMembers')
-      .withIndex('by_workspace', (q) => q.eq('userId', userId))
+      .withIndex('by_user', (q) => q.eq('userId', userId))
       .collect();
     
     const memberWorkspaceIds = memberships

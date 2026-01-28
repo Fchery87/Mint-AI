@@ -50,4 +50,14 @@ export const auth = betterAuth({
 });
 
 export type Session = typeof auth.$Infer.Session;
-export type User = typeof auth.$Infer.User;
+// Note: User type is nested within session for Better Auth
+// We'll use a simpler type for now based on our schema
+export interface User {
+  id: string;
+  email: string;
+  emailVerified?: boolean;
+  name?: string;
+  image?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}

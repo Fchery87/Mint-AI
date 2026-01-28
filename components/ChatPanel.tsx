@@ -1,9 +1,13 @@
 import { useRef, useState, memo, useCallback, useMemo } from "react";
-import { Cpu } from "lucide-react";
+import { Cpu, Terminal, Sparkles } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { CyberButton } from "@/components/ui";
 import { SkillComposer } from "@/components/SkillComposer";
 import type { SkillChainItem } from "@/components/SkillComposer";
 import MessageItem, { type ChatMessage, type ThinkingItem } from "@/components/MessageItem";
+import { ThinkingBlock } from "@/components/ThinkingBlock";
+import { StreamingIndicator } from "@/components/StreamingIndicator";
+import { SkillBadge } from "@/components/SkillBadge";
 import {
   PromptInputProvider,
   PromptInput,
@@ -23,6 +27,7 @@ import {
 } from "@/components/prompt-input";
 import { SkillType } from "@/types/skill";
 import { PlanStatus } from "@/types/plan-build";
+import { cn } from "@/lib/utils";
 
 // Re-export types for consumers
 export type { ChatMessage, ThinkingItem };
@@ -224,7 +229,48 @@ function ChatPanelComponent({
           </div>
         ) : (
           <>
+            {/* Active Thinking Timeline - Shows during streaming */}
+            <AnimatePresence>
+              {isLoading && activeSkill && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  className="mb-4"
+                >
+                  <StreamingIndicator 
+                    skill={activeSkill}
+                    status={`${activeSkill.type} // ${activeSkill.stage}`}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {messageList}
+
+            {/* Streaming Indicator at bottom */}
+            <AnimatePresence>
+              {isLoading && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="mt-4"
+                >
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+                    <div className="flex gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:0.1s]" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:0.2s]" />
+                    </div>
+                    <span className="uppercase tracking-wider">
+                      {activeSkill ? `${activeSkill.stage}...` : "Processing..."}
+                    </span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div ref={messagesEndRef} />
           </>
         )}
