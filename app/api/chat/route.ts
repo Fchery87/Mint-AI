@@ -9,10 +9,16 @@ import { trackUsage } from '@/lib/cost-tracking';
 import { detectIntent, buildSkillContext } from '@/lib/skills/classifier';
 import { SkillType } from '@/types/skill';
 import { sanitizeErrorForLogging, getSafeErrorMessage } from '@/lib/security';
+import {
+  createParseState,
+  parseSSEChunk,
+  flushParseState,
+  formatSSEEvent,
+} from '@/lib/streaming/parser';
 
 // SSE helper: Format event with proper named event syntax for EventSource
 function sseEvent(eventType: string, data: Record<string, unknown>): string {
-  return `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+  return formatSSEEvent(eventType, data);
 }
 
 // Lazy initialize OpenAI-compatible client based on active provider
@@ -492,12 +498,8 @@ Current step index: ${validationResult.data.currentStepIndex || 0}`;
             ),
           );
 
-          let buffer = '';
-          let inCodeBlock = false;
-          let pendingFileMarker = false;
-          let thinkingType: string | null = null;
-          let thinkingBuffer = '';
-          let explanationBuffer = '';
+          // Initialize parser state
+          let parseState = createParseState();
 
           for await (const chunk of stream) {
             const content = chunk.choices[0]?.delta?.content || '';
@@ -509,323 +511,30 @@ Current step index: ${validationResult.data.currentStepIndex || 0}`;
 
             if (content) {
               fullResponse += content;
-              buffer += content;
 
-              // Process buffer for tags and content
-              while (buffer.length > 0) {
-                // Check for thinking start tag anywhere in buffer: <thinking type="...">
-                const thinkingStartMatch = buffer.match(
-                  /<thinking\s+type="([^"]+)">/,
-                );
-                if (
-                  thinkingStartMatch &&
-                  thinkingStartMatch.index !== undefined
-                ) {
-                  const before = buffer.substring(0, thinkingStartMatch.index);
+              // Parse the chunk using the state machine parser
+              const result = parseSSEChunk(content, parseState);
+              parseState = result.newState;
 
-                  // Send any text before thinking tag as explanation
-                  if (before.trim()) {
-                    explanationBuffer += before;
-                    controller.enqueue(
-                      encoder.encode(
-                        sseEvent('explanation-chunk', { content: before }),
-                      ),
-                    );
-                  }
+              // Send all generated events
+              for (const event of result.events) {
+                controller.enqueue(encoder.encode(sseEvent(event.type, event)));
 
-                  buffer = buffer.substring(
-                    thinkingStartMatch.index + thinkingStartMatch[0].length,
-                  );
-                  thinkingType = thinkingStartMatch[1];
-                  thinkingBuffer = '';
-                  continue;
+                // Track code chunks for final accumulation
+                if (event.type === 'code-chunk') {
+                  accumulatedCode += event.content;
                 }
-
-                // Check for thinking end tag
-                if (thinkingType && buffer.includes('</thinking>')) {
-                  const idx = buffer.indexOf('</thinking>');
-                  const thinkingContent = buffer.substring(0, idx);
-
-                  if (thinkingContent) {
-                    thinkingBuffer += thinkingContent;
-                    // Send thinking chunk
-                    controller.enqueue(
-                      encoder.encode(
-                        sseEvent('thinking-chunk', {
-                          thinkingType,
-                          content: thinkingBuffer,
-                        }),
-                      ),
-                    );
-                  }
-
-                  // Send thinking-complete
-                  controller.enqueue(
-                    encoder.encode(
-                      sseEvent('thinking-complete', { thinkingType }),
-                    ),
-                  );
-
-                  buffer = buffer.substring(idx + 12); // Remove </thinking>
-                  thinkingType = null;
-                  thinkingBuffer = '';
-                  continue;
-                }
-
-                // While in thinking block, stream content
-                if (thinkingType) {
-                  // Check for potential partial closing tag - hold back if we might have incomplete tag
-                  // </thinking> could be split like </thi or </think etc.
-                  const potentialCloseIdx = buffer.lastIndexOf('<');
-                  const hasPartialCloseTag =
-                    potentialCloseIdx !== -1 &&
-                    potentialCloseIdx > buffer.length - 12 && // </thinking> is 11 chars
-                    !buffer.includes('>', potentialCloseIdx);
-
-                  // Check if we have a complete thought to send
-                  if (
-                    (buffer.length > 30 ||
-                      buffer.includes('\n') ||
-                      buffer.endsWith('. ')) &&
-                    !hasPartialCloseTag
-                  ) {
-                    // If there's a potential partial tag, only send content before it
-                    let contentToSend = buffer;
-                    let remainingBuffer = '';
-
-                    if (potentialCloseIdx !== -1 && potentialCloseIdx > 0) {
-                      // Check if the < might be start of </thinking>
-                      const afterLt = buffer.substring(potentialCloseIdx);
-                      if (afterLt.startsWith('</') || afterLt === '<') {
-                        contentToSend = buffer.substring(0, potentialCloseIdx);
-                        remainingBuffer = buffer.substring(potentialCloseIdx);
-                      }
-                    }
-
-                    if (contentToSend.trim()) {
-                      thinkingBuffer += contentToSend;
-                      controller.enqueue(
-                        encoder.encode(
-                          sseEvent('thinking-chunk', {
-                            thinkingType,
-                            content: thinkingBuffer,
-                          }),
-                        ),
-                      );
-                    }
-                    buffer = remainingBuffer;
-                  }
-                  break;
-                }
-
-                // Check for code block
-                if (buffer.includes('```')) {
-                  const idx = buffer.indexOf('```');
-                  const before = buffer.substring(0, idx);
-
-                  if (!inCodeBlock) {
-                    // Starting code block - send any text before as explanation
-                    if (before.trim()) {
-                      explanationBuffer += before;
-                      controller.enqueue(
-                        encoder.encode(
-                          sseEvent('explanation-chunk', { content: before }),
-                        ),
-                      );
-                    }
-                    buffer = buffer.substring(idx + 3);
-                    // Check for language identifier or file path line
-                    // Matches: tsx, typescript, file:package.json, file:app/page.tsx, etc.
-                    const lineEnd = buffer.indexOf('\n');
-                    let fileMarker = '';
-                    if (lineEnd !== -1) {
-                      const firstLine = buffer.substring(0, lineEnd).trim();
-                      const nextLineStart = lineEnd + 1;
-                      const nextLineEnd = buffer.indexOf('\n', nextLineStart);
-
-                      const tokens = firstLine.split(/\s+/).filter(Boolean);
-                      const fileToken = tokens.find((token) =>
-                        token.startsWith('file:'),
-                      );
-                      const isSimpleTag =
-                        tokens.length === 1 &&
-                        /^(file:[^\s]+|[a-zA-Z0-9_+-]+)$/.test(tokens[0]);
-
-                      let marker = '';
-                      let consumeLines = 0;
-
-                      if (fileToken || isSimpleTag) {
-                        marker =
-                          fileToken ||
-                          (firstLine.startsWith('file:') ? firstLine : '');
-                        consumeLines = 1;
-                      } else if (firstLine === '' && nextLineEnd !== -1) {
-                        const nextLine = buffer
-                          .substring(nextLineStart, nextLineEnd)
-                          .trim();
-                        if (nextLine.startsWith('file:')) {
-                          marker = nextLine;
-                          consumeLines = 2;
-                        }
-                      } else if (firstLine === '' && nextLineEnd === -1) {
-                        pendingFileMarker = true;
-                      }
-
-                      if (marker) {
-                        // IMPORTANT: Preserve file markers for parseProjectOutput to detect multiple files
-                        fileMarker = '```' + marker + '\n';
-                      }
-
-                      if (consumeLines > 0) {
-                        const cutIndex =
-                          consumeLines === 1 ? lineEnd + 1 : nextLineEnd + 1;
-                        buffer = buffer.substring(cutIndex);
-                      }
-                    }
-                    // Include the file marker in accumulated code for proper parsing
-                    accumulatedCode += fileMarker;
-                    inCodeBlock = true;
-                  } else {
-                    // Ending code block - send as code-chunk event
-                    if (pendingFileMarker && before.includes('\n')) {
-                      const lineEnd = before.indexOf('\n');
-                      const firstLine = before.substring(0, lineEnd).trim();
-                      if (firstLine.startsWith('file:')) {
-                        accumulatedCode += '```' + firstLine + '\n';
-                        accumulatedCode += before.substring(lineEnd + 1);
-                      } else {
-                        accumulatedCode += before;
-                      }
-                      pendingFileMarker = false;
-                    } else {
-                      accumulatedCode += before;
-                    }
-                    // Add closing backticks to complete the file block for parsing
-                    accumulatedCode += '```\n';
-                    controller.enqueue(
-                      encoder.encode(
-                        sseEvent('code-chunk', { content: before }),
-                      ),
-                    );
-                    buffer = buffer.substring(idx + 3);
-                    inCodeBlock = false;
-                  }
-                  continue;
-                }
-
-                // Stream code or text
-                if (inCodeBlock) {
-                  if (pendingFileMarker && buffer.includes('\n')) {
-                    const lineEnd = buffer.indexOf('\n');
-                    const firstLine = buffer.substring(0, lineEnd).trim();
-                    if (firstLine.startsWith('file:')) {
-                      accumulatedCode += '```' + firstLine + '\n';
-                      buffer = buffer.substring(lineEnd + 1);
-                    }
-                    pendingFileMarker = false;
-                  }
-                  if (buffer.length > 20 || buffer.includes('\n')) {
-                    accumulatedCode += buffer;
-                    controller.enqueue(
-                      encoder.encode(
-                        sseEvent('code-chunk', { content: buffer }),
-                      ),
-                    );
-                    buffer = '';
-                  }
-                } else {
-                  // Check for potential partial thinking tag or code block - hold back if incomplete
-                  const potentialTagIndex = buffer.indexOf('<');
-                  const potentialCodeIndex = buffer.indexOf('`');
-
-                  const hasCompletePotentialTag =
-                    potentialTagIndex === -1 ||
-                    (potentialTagIndex !== -1 &&
-                      buffer.includes('>', potentialTagIndex));
-
-                  // Check if we have a partial code block (1-2 backticks at end)
-                  const hasPartialCodeBlock =
-                    (buffer.endsWith('`') && !buffer.endsWith('```')) ||
-                    (buffer.endsWith('``') && !buffer.endsWith('```'));
-
-                  // If buffer contains full ``` we should process it in the code block section
-                  const hasFullCodeBlock = buffer.includes('```');
-
-                  if (hasFullCodeBlock) {
-                    // Let the code block handler above deal with this
-                    // This shouldn't happen since we continue after code block detection
-                    break;
-                  }
-
-                  if (
-                    (buffer.length > 20 || buffer.includes('\n')) &&
-                    hasCompletePotentialTag &&
-                    !hasPartialCodeBlock
-                  ) {
-                    explanationBuffer += buffer;
-                    controller.enqueue(
-                      encoder.encode(
-                        sseEvent('explanation-chunk', { content: buffer }),
-                      ),
-                    );
-                    buffer = '';
-                  } else if (
-                    potentialTagIndex !== -1 &&
-                    potentialTagIndex > 0 &&
-                    !hasCompletePotentialTag
-                  ) {
-                    // Send content before the potential tag, keep the rest
-                    const safeContent = buffer.substring(0, potentialTagIndex);
-                    if (safeContent.trim()) {
-                      explanationBuffer += safeContent;
-                      controller.enqueue(
-                        encoder.encode(
-                          sseEvent('explanation-chunk', {
-                            content: safeContent,
-                          }),
-                        ),
-                      );
-                    }
-                    buffer = buffer.substring(potentialTagIndex);
-                  } else if (
-                    potentialCodeIndex !== -1 &&
-                    potentialCodeIndex > 0 &&
-                    buffer.length - potentialCodeIndex < 3
-                  ) {
-                    // We have a ` near the end - might be start of code block
-                    // Send content before it, keep the potential code marker
-                    const safeContent = buffer.substring(0, potentialCodeIndex);
-                    if (safeContent.trim()) {
-                      explanationBuffer += safeContent;
-                      controller.enqueue(
-                        encoder.encode(
-                          sseEvent('explanation-chunk', {
-                            content: safeContent,
-                          }),
-                        ),
-                      );
-                    }
-                    buffer = buffer.substring(potentialCodeIndex);
-                  }
-                }
-                break;
               }
             }
           }
 
-          // Send any remaining buffer
-          if (buffer.trim()) {
-            if (inCodeBlock) {
-              accumulatedCode += buffer;
-              controller.enqueue(
-                encoder.encode(sseEvent('code-chunk', { content: buffer })),
-              );
-            } else {
-              controller.enqueue(
-                encoder.encode(
-                  sseEvent('explanation-chunk', { content: buffer }),
-                ),
-              );
+          // Flush any remaining content
+          const finalEvents = flushParseState(parseState);
+          for (const event of finalEvents) {
+            controller.enqueue(encoder.encode(sseEvent(event.type, event)));
+
+            if (event.type === 'code-chunk') {
+              accumulatedCode += event.content;
             }
           }
 
