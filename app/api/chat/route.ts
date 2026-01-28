@@ -103,16 +103,28 @@ async function getWebSearchContext(query: string): Promise<{
     );
   }
 
-  const data: any = await searchRes.json();
+  interface WebSearchResult {
+    title: string | undefined;
+    url: string;
+  }
+
+  interface WebSearchResponse {
+    results: Array<{
+      title?: string;
+      url?: string;
+    }>;
+  }
+
+  const data = (await searchRes.json()) as WebSearchResponse;
   const results = Array.isArray(data?.results) ? data.results : [];
   const sources = results
-    .map((r: any) => ({
+    .map((r) => ({
       title: typeof r?.title === 'string' ? r.title : undefined,
       url: typeof r?.url === 'string' ? r.url : '',
     }))
-    .filter((r: any) => r.url);
+    .filter((r): r is WebSearchResult => r.url.length > 0);
 
-  const contextLines = sources.map((s: any, idx: number) => {
+  const contextLines = sources.map((s, idx) => {
     const title = s.title ? s.title.replace(/\s+/g, ' ').trim() : 'Untitled';
     return `[${idx + 1}] ${title} — ${s.url}`;
   });
@@ -444,7 +456,13 @@ Current step index: ${validationResult.data.currentStepIndex || 0}`;
     // Create a readable stream for the response
     const encoder = new TextEncoder();
     let fullResponse = '';
-    let usageData: any = null;
+    interface UsageData {
+      prompt_tokens: number;
+      completion_tokens: number;
+      total_tokens: number;
+    }
+
+    let usageData: UsageData | null = null;
     let accumulatedCode = ''; // Track full code for done event
 
     // Map skill type to workflow stage
