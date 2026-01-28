@@ -247,14 +247,36 @@ describe('SSE Parser', () => {
       expect(result.newState.pendingFileMarker).toBe(true);
     });
 
-    it('should handle file marker after code block start', () => {
+    it('should emit file marker event after code block start', () => {
       let state = createParseState();
       state = { ...state, inCodeBlock: true, pendingFileMarker: true };
 
       const result = parseSSEChunk('file:app/page.tsx\nconst x = 1', state);
 
-      expect(result.events).toHaveLength(1);
+      expect(result.events).toHaveLength(2);
       expect(result.events[0]).toEqual({
+        type: 'file-marker',
+        marker: 'file:app/page.tsx',
+      });
+      expect(result.events[1]).toEqual({
+        type: 'code-chunk',
+        content: 'const x = 1',
+      });
+      expect(result.newState.pendingFileMarker).toBe(false);
+    });
+
+    it('should emit file marker event on second line', () => {
+      let state = createParseState();
+      state = { ...state, inCodeBlock: true, pendingFileMarker: true };
+
+      const result = parseSSEChunk('\nfile:app/page.tsx\nconst x = 1', state);
+
+      expect(result.events).toHaveLength(2);
+      expect(result.events[0]).toEqual({
+        type: 'file-marker',
+        marker: 'file:app/page.tsx',
+      });
+      expect(result.events[1]).toEqual({
         type: 'code-chunk',
         content: 'const x = 1',
       });

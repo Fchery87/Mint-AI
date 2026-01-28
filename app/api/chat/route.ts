@@ -520,8 +520,10 @@ Current step index: ${validationResult.data.currentStepIndex || 0}`;
               for (const event of result.events) {
                 controller.enqueue(encoder.encode(sseEvent(event.type, event)));
 
-                // Track code chunks for final accumulation
-                if (event.type === 'code-chunk') {
+                // Track code chunks and file markers for final accumulation
+                if (event.type === 'file-marker') {
+                  accumulatedCode += '```' + event.marker + '\n';
+                } else if (event.type === 'code-chunk') {
                   accumulatedCode += event.content;
                 }
               }
@@ -533,7 +535,10 @@ Current step index: ${validationResult.data.currentStepIndex || 0}`;
           for (const event of finalEvents) {
             controller.enqueue(encoder.encode(sseEvent(event.type, event)));
 
-            if (event.type === 'code-chunk') {
+            // Track code chunks and file markers for final accumulation
+            if (event.type === 'file-marker') {
+              accumulatedCode += '```' + event.marker + '\n';
+            } else if (event.type === 'code-chunk') {
               accumulatedCode += event.content;
             }
           }

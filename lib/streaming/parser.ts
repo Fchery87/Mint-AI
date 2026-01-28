@@ -31,6 +31,7 @@ export type SSEEvent =
   | { type: 'thinking-complete'; thinkingType: string }
   | { type: 'explanation-chunk'; content: string }
   | { type: 'code-chunk'; content: string }
+  | { type: 'file-marker'; marker: string }
   | { type: 'done' }
   | { type: 'error'; error: string };
 
@@ -308,7 +309,11 @@ function processCodeBlock(
 
       // Check if first line is a file marker
       if (firstLine.startsWith(FILE_MARKER_PREFIX)) {
-        // File marker found - don't send it as code, just consume it
+        // File marker found - emit event and consume it
+        events.push({
+          type: 'file-marker',
+          marker: firstLine,
+        });
         buffer = buffer.substring(newlineIndex + 1);
         pendingFileMarker = false;
         // Continue processing the rest as code
@@ -320,7 +325,11 @@ function processCodeBlock(
             .substring(newlineIndex + 1, secondNewlineIndex)
             .trim();
           if (secondLine.startsWith(FILE_MARKER_PREFIX)) {
-            // File marker on second line
+            // File marker on second line - emit event
+            events.push({
+              type: 'file-marker',
+              marker: secondLine,
+            });
             buffer = buffer.substring(secondNewlineIndex + 1);
             pendingFileMarker = false;
           } else {
