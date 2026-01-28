@@ -1,6 +1,9 @@
-import { useRef } from "react";
-import { Logo } from "@/components/ui/logo";
-import { MessageItem, type ChatMessage, type ThinkingItem } from "@/components/MessageItem";
+import { useRef, useState, memo, useCallback, useMemo } from "react";
+import { Cpu } from "lucide-react";
+import { CyberButton } from "@/components/ui";
+import { SkillComposer } from "@/components/SkillComposer";
+import type { SkillChainItem } from "@/components/SkillComposer";
+import MessageItem, { type ChatMessage, type ThinkingItem } from "@/components/MessageItem";
 import {
   PromptInputProvider,
   PromptInput,
@@ -41,9 +44,15 @@ interface ChatPanelProps {
   hasUnansweredQuestions?: boolean;
   onApprovePlan?: () => void;
   onReviewPlan?: () => void;
+  // Enhanced code action props
+  onRunCode?: (code: string, language: string) => void;
+  onDiffCode?: (before: string, after: string) => void;
+  onApplyCode?: (code: string, filename?: string) => void;
+  onApplyArtifact?: (files: Array<{ path: string; code: string }>) => void;
+  onCopyCode?: (code: string) => void;
 }
 
-export default function ChatPanel({
+function ChatPanelComponent({
   messages,
   isLoading,
   onSendMessage,
@@ -54,32 +63,137 @@ export default function ChatPanel({
   hasUnansweredQuestions,
   onApprovePlan,
   onReviewPlan,
+  onRunCode,
+  onDiffCode,
+  onApplyCode,
+  onApplyArtifact,
+  onCopyCode,
 }: ChatPanelProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [showSkillComposer, setShowSkillComposer] = useState(false);
 
-  const handleSubmit = (message: PromptInputMessage) => {
+  // Memoize callback handlers to prevent unnecessary re-renders of children
+  const handleSubmit = useCallback((message: PromptInputMessage) => {
     if (message.text.trim() && !isLoading) {
       onSendMessage(message.text);
       if (message.files && message.files.length > 0) {
         console.log("Attachments received:", message.files);
       }
     }
-  };
+  }, [isLoading, onSendMessage]);
+
+  const handleExecuteSkillChain = useCallback(async (chain: SkillChainItem[]) => {
+    const enabledSkills = chain.filter(item => item.enabled).map(item => item.skill);
+    console.log("Executing skill chain:", enabledSkills);
+    // TODO: Implement actual skill chain execution
+    // For now, just send a message with the skill chain info
+    onSendMessage(`Execute skill chain: ${enabledSkills.join(" → ")}`);
+  }, [onSendMessage]);
+
+  const handleSaveSkillChain = useCallback((chain: SkillChainItem[]) => {
+    const enabledSkills = chain.filter(item => item.enabled).map(item => item.skill);
+    console.log("Saving skill chain:", enabledSkills);
+    // TODO: Implement skill chain persistence
+  }, []);
+
+  // Memoize the toggle handler
+  const toggleSkillComposer = useCallback(() => {
+    setShowSkillComposer(prev => !prev);
+  }, []);
+
+  // Memoize the back button handler
+  const handleBackToChat = useCallback(() => {
+    setShowSkillComposer(false);
+  }, []);
+
+  // Memoize suggestion click handler
+  const handleSuggestionClick = useCallback((title: string) => {
+    onSendMessage(title);
+  }, [onSendMessage]);
+
+  // Memoize messages list to prevent unnecessary re-renders
+  // Must be at top level before any conditional returns (Rules of Hooks)
+  const messageList = useMemo(() => messages.map((msg, idx) => (
+    <MessageItem
+      key={idx}
+      message={msg}
+      isLatest={idx === messages.length - 1}
+      isStreaming={isLoading}
+      activeSkill={activeSkill}
+      planStatus={planStatus}
+      canStartBuild={canStartBuild}
+      hasUnansweredQuestions={hasUnansweredQuestions}
+      onApprovePlan={onApprovePlan}
+      onReviewPlan={onReviewPlan}
+      onRunCode={onRunCode}
+      onDiffCode={onDiffCode}
+      onApplyCode={onApplyCode}
+      onApplyArtifact={onApplyArtifact}
+      onCopyCode={onCopyCode}
+    />
+  )), [messages, isLoading, activeSkill, planStatus, canStartBuild, hasUnansweredQuestions, onApprovePlan, onReviewPlan, onRunCode, onDiffCode, onApplyCode, onApplyArtifact, onCopyCode]);
+
+  if (showSkillComposer) {
+    return (
+      <div className="flex flex-col h-full">
+        {/* Header - Cyberpunk */}
+        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/60 bg-muted/20">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-sm bg-secondary shadow-neon-secondary-sm animate-pulse" />
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-secondary">
+              Skill_Composer
+            </span>
+          </div>
+          <button
+            onClick={handleBackToChat}
+            className="px-4 py-1.5 text-xs font-bold uppercase tracking-wider font-mono cyber-chamfer-sm border border-border/40 hover:border-secondary hover:bg-secondary/10 hover:shadow-neon-secondary-sm transition-all duration-fast"
+          >
+            ← Back to Chat
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <SkillComposer
+            onExecute={handleExecuteSkillChain}
+            onSave={handleSaveSkillChain}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+      {/* Header - Cyberpunk */}
+      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/60 bg-muted/20">
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-sm bg-primary shadow-neon-sm animate-pulse" />
+          <span className="text-xs font-mono font-bold uppercase tracking-widest text-primary">
+            Chat_Interface
+          </span>
+        </div>
+        <button
+          onClick={toggleSkillComposer}
+          className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold uppercase tracking-wider font-mono cyber-chamfer-sm border border-border/40 hover:border-primary hover:bg-primary/10 hover:shadow-neon-sm transition-all duration-fast group"
+        >
+          <span className="text-primary group-hover:text-primary transition-colors">⚡ SKILL_COMPOSER</span>
+          {showSkillComposer ? "▼" : "▶"}
+        </button>
+      </div>
+
+      {/* Messages - Cyberpunk Empty State */}
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-4 cyber-grid">
         {messages.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center p-4">
             <div className="max-w-sm w-full space-y-8">
               <div className="text-center space-y-2">
                 <div className="flex justify-center mb-6">
-                  <Logo className="scale-150" hideText />
+                  <Cpu size={48} className="text-primary shadow-neon animate-pulse" />
                 </div>
-                <h2 className="text-xl font-semibold tracking-tight">How can I help you?</h2>
-                <p className="text-sm text-muted-foreground">
-                  Describe the UI component you want to build and I'll generate the code for you.
+                <h2 className="text-xl font-mono font-bold uppercase tracking-widest text-primary">
+                  How can I help you?
+                </h2>
+                <p className="text-sm text-muted-foreground font-mono uppercase tracking-wider">
+                  Describe the system you want to build and I'll generate the code.
                 </p>
               </div>
               
@@ -89,50 +203,40 @@ export default function ChatPanel({
                   { title: "Build a login form", desc: "With validation & styling" },
                   { title: "Dashboard cards", desc: "With charts & stats" },
                 ].map((item, i) => (
-                  <button
+                  <CyberButton
                     key={i}
-                    onClick={() => onSendMessage(item.title)}
-                    className="group relative p-4 rounded-xl border border-border/50 bg-card hover:bg-accent/50 hover:border-primary/20 text-left transition-all duration-200"
+                    onClick={() => handleSuggestionClick(item.title)}
+                    variant="outline"
+                    className="w-full justify-start text-left group"
                   >
-                    <div className="font-medium text-sm group-hover:text-primary transition-colors">
-                      {item.title}
+                    <div className="flex flex-col items-start gap-1">
+                      <div className="font-mono font-bold uppercase text-sm group-hover:text-primary transition-colors">
+                        {item.title}
+                      </div>
+                      <div className="text-xs text-muted-foreground font-mono uppercase tracking-wider">
+                        {item.desc}
+                      </div>
                     </div>
-                    <div className="text-xs text-muted-foreground mt-1">
-                      {item.desc}
-                    </div>
-                  </button>
+                  </CyberButton>
                 ))}
               </div>
             </div>
           </div>
         ) : (
           <>
-            {messages.map((msg, idx) => (
-              <MessageItem
-                key={idx}
-                message={msg}
-                isLatest={idx === messages.length - 1}
-                isStreaming={isLoading}
-                activeSkill={activeSkill}
-                planStatus={planStatus}
-                canStartBuild={canStartBuild}
-                hasUnansweredQuestions={hasUnansweredQuestions}
-                onApprovePlan={onApprovePlan}
-                onReviewPlan={onReviewPlan}
-              />
-            ))}
+            {messageList}
             <div ref={messagesEndRef} />
           </>
         )}
       </div>
 
-      {/* Input */}
-      <div className="p-4 border-t border-border/40 bg-background/50 backdrop-blur-sm">
+      {/* Input - Cyberpunk */}
+      <div className="p-4 border-t border-border/60 bg-muted/20 backdrop-blur-sm">
         <PromptInputProvider onSubmit={handleSubmit}>
           <PromptInput
             globalDrop
             multiple
-            className="rounded-xl bg-muted/50 border border-border/50 focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary/50 transition-all"
+            className="cyber-chamfer-md bg-card/40 border-2 border-border/60 focus-within:border-primary focus-within:shadow-neon-sm transition-all duration-fast"
           >
             <PromptInputAttachments>
               {(attachment) => <PromptInputAttachmentCard data={attachment} />}
@@ -140,7 +244,8 @@ export default function ChatPanel({
             <PromptInputBody>
               <PromptInputTextarea
                 ref={textareaRef}
-                placeholder="Describe what you want to build..."
+                placeholder="> Describe the system you want to build..."
+                className="font-mono uppercase tracking-wider placeholder:text-muted-foreground/60"
               />
             </PromptInputBody>
             <PromptInputFooter>
@@ -157,10 +262,23 @@ export default function ChatPanel({
             </PromptInputFooter>
           </PromptInput>
         </PromptInputProvider>
-        <div className="text-[10px] text-center text-muted-foreground mt-2">
-          Mint AI can make mistakes. Please check the code.
+        <div className="text-[10px] text-center text-muted-foreground mt-3 font-mono uppercase tracking-wider">
+          <span className="text-primary terminal-prompt">{'>'}</span> MINT_AI_PROTOCOL // CAUTION: MAY CONTAIN ERRORS
         </div>
       </div>
     </div>
   );
 }
+
+// Memoize the ChatPanel component to prevent unnecessary re-renders
+export default memo(ChatPanelComponent, (prevProps, nextProps) => {
+  return (
+    prevProps.messages === nextProps.messages &&
+    prevProps.isLoading === nextProps.isLoading &&
+    prevProps.status === nextProps.status &&
+    prevProps.activeSkill === nextProps.activeSkill &&
+    prevProps.planStatus === nextProps.planStatus &&
+    prevProps.canStartBuild === nextProps.canStartBuild &&
+    prevProps.hasUnansweredQuestions === nextProps.hasUnansweredQuestions
+  );
+});
