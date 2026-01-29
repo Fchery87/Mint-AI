@@ -5,25 +5,28 @@
  * Extracted from page.tsx to separate workspace concerns from UI.
  */
 
-import { useState, useCallback, useEffect, useMemo } from "react";
-import { toast } from "sonner";
-import * as Sentry from "@sentry/nextjs";
-import type { WorkspaceState, PendingChange } from "@/types/workspace";
+import { useState, useCallback, useEffect, useMemo } from 'react';
+import { toast } from 'sonner';
+import * as Sentry from '@sentry/nextjs';
+import type { WorkspaceState, PendingChange } from '@/types/workspace';
 
 export type { WorkspaceState };
-import type { ProjectOutput } from "@/lib/project-types";
+import type { ProjectOutput } from '@/lib/project-types';
 import {
   createCheckpoint,
   workspaceFromProjectOutput,
   workspaceFromSingleFile,
-} from "@/lib/workspace";
+} from '@/lib/workspace';
 import {
   clearWorkspace as clearWorkspaceStorage,
   loadWorkspace,
   saveWorkspace,
-} from "@/lib/workspace-storage";
-import { detectLanguage } from "@/lib/language-detection";
-import { validatePath, getPathValidationErrorMessage } from "@/lib/path-validation";
+} from '@/lib/workspace-storage';
+import { detectLanguage } from '@/lib/language-detection';
+import {
+  validatePath,
+  getPathValidationErrorMessage,
+} from '@/lib/path-validation';
 
 export interface UseWorkspaceReturn {
   workspace: WorkspaceState | null;
@@ -45,16 +48,27 @@ export interface UseWorkspaceReturn {
   rejectPendingChange: (path: string) => void;
   acceptAllPendingChanges: () => void;
   rejectAllPendingChanges: () => void;
-  setPendingChanges: (changes: Record<string, PendingChange>) => void;
-  updateWorkspaceFromOutput: (output: ProjectOutput, mode?: "plan" | "build") => void;
+  setPendingChanges: React.Dispatch<
+    React.SetStateAction<Record<string, PendingChange>>
+  >;
+  updateWorkspaceFromOutput: (
+    output: ProjectOutput,
+    mode?: 'plan' | 'build',
+  ) => void;
   setWorkspace: React.Dispatch<React.SetStateAction<WorkspaceState | null>>;
-  setDraftWorkspace: React.Dispatch<React.SetStateAction<WorkspaceState | null>>;
+  setDraftWorkspace: React.Dispatch<
+    React.SetStateAction<WorkspaceState | null>
+  >;
 }
 
 export function useWorkspace(): UseWorkspaceReturn {
   const [workspace, setWorkspace] = useState<WorkspaceState | null>(null);
-  const [draftWorkspace, setDraftWorkspace] = useState<WorkspaceState | null>(null);
-  const [pendingChanges, setPendingChanges] = useState<Record<string, PendingChange>>({});
+  const [draftWorkspace, setDraftWorkspace] = useState<WorkspaceState | null>(
+    null,
+  );
+  const [pendingChanges, setPendingChanges] = useState<
+    Record<string, PendingChange>
+  >({});
 
   // Load persisted workspace on first mount
   useEffect(() => {
@@ -75,26 +89,29 @@ export function useWorkspace(): UseWorkspaceReturn {
   }, [workspace]);
 
   // Keep a read-only draft workspace while streaming before first commit
-  const updateDraftWorkspace = useCallback((
-    currentWorkspace: WorkspaceState | null,
-    projectOutput: ProjectOutput | null,
-    componentCode: string,
-    outputFormat: string
-  ) => {
-    if (currentWorkspace) {
+  const updateDraftWorkspace = useCallback(
+    (
+      currentWorkspace: WorkspaceState | null,
+      projectOutput: ProjectOutput | null,
+      componentCode: string,
+      outputFormat: string,
+    ) => {
+      if (currentWorkspace) {
+        setDraftWorkspace(null);
+        return;
+      }
+      if (projectOutput?.type === 'project') {
+        setDraftWorkspace(workspaceFromProjectOutput(projectOutput));
+        return;
+      }
+      if (componentCode) {
+        setDraftWorkspace(workspaceFromSingleFile(componentCode, outputFormat));
+        return;
+      }
       setDraftWorkspace(null);
-      return;
-    }
-    if (projectOutput?.type === "project") {
-      setDraftWorkspace(workspaceFromProjectOutput(projectOutput));
-      return;
-    }
-    if (componentCode) {
-      setDraftWorkspace(workspaceFromSingleFile(componentCode, outputFormat));
-      return;
-    }
-    setDraftWorkspace(null);
-  }, []);
+    },
+    [],
+  );
 
   const displayWorkspace = workspace || draftWorkspace;
   const displayReadOnly = !workspace;
@@ -110,7 +127,7 @@ export function useWorkspace(): UseWorkspaceReturn {
       category: 'workspace',
       message: 'User created file',
       level: 'info',
-      data: { path, language, contentLength: content.length }
+      data: { path, language, contentLength: content.length },
     });
     setWorkspace((prev) => {
       if (!prev) {
@@ -136,7 +153,7 @@ export function useWorkspace(): UseWorkspaceReturn {
       category: 'workspace',
       message: 'User updated file',
       level: 'info',
-      data: { path, contentLength: content.length }
+      data: { path, contentLength: content.length },
     });
     setWorkspace((prev) => {
       if (!prev) return prev;
@@ -148,7 +165,7 @@ export function useWorkspace(): UseWorkspaceReturn {
     });
   }, []);
 
-    const deleteFile = useCallback((path: string) => {
+  const deleteFile = useCallback((path: string) => {
     const validation = validatePath(path);
     if (!validation.valid) {
       toast.error(getPathValidationErrorMessage(path, validation));
@@ -158,15 +175,16 @@ export function useWorkspace(): UseWorkspaceReturn {
       category: 'workspace',
       message: 'User deleted file',
       level: 'info',
-      data: { path }
+      data: { path },
     });
     setWorkspace((prev) => {
       if (!prev) return prev;
       const files = { ...prev.files };
       delete files[path];
-      const newActivePath = prev.activePath === path
-        ? (Object.keys(files)[0] || undefined)
-        : prev.activePath;
+      const newActivePath =
+        prev.activePath === path
+          ? Object.keys(files)[0] || undefined
+          : prev.activePath;
       return {
         ...prev,
         files,
@@ -192,7 +210,7 @@ export function useWorkspace(): UseWorkspaceReturn {
       category: 'workspace',
       message: 'User renamed file',
       level: 'info',
-      data: { oldPath, newPath }
+      data: { oldPath, newPath },
     });
     setWorkspace((prev) => {
       if (!prev) return prev;
@@ -226,7 +244,7 @@ export function useWorkspace(): UseWorkspaceReturn {
       category: 'workspace',
       message: 'User created checkpoint',
       level: 'info',
-      data: { label }
+      data: { label },
     });
     setWorkspace((prev) => {
       if (!prev) return prev;
@@ -237,7 +255,7 @@ export function useWorkspace(): UseWorkspaceReturn {
         updatedAt: Date.now(),
       };
     });
-    toast.success("Checkpoint saved");
+    toast.success('Checkpoint saved');
   }, []);
 
   const restoreCheckpoint = useCallback((checkpointId: string) => {
@@ -245,7 +263,7 @@ export function useWorkspace(): UseWorkspaceReturn {
       category: 'workspace',
       message: 'User restored checkpoint',
       level: 'info',
-      data: { checkpointId }
+      data: { checkpointId },
     });
     setWorkspace((prev) => {
       if (!prev) return prev;
@@ -258,7 +276,7 @@ export function useWorkspace(): UseWorkspaceReturn {
         updatedAt: Date.now(),
       };
     });
-    toast.success("Checkpoint restored");
+    toast.success('Checkpoint restored');
   }, []);
 
   const revertFile = useCallback((path: string) => {
@@ -266,7 +284,7 @@ export function useWorkspace(): UseWorkspaceReturn {
       if (!prev?.baseFiles) return prev;
       return {
         ...prev,
-        files: { ...prev.files, [path]: prev.baseFiles[path] ?? "" },
+        files: { ...prev.files, [path]: prev.baseFiles[path] ?? '' },
         updatedAt: Date.now(),
       };
     });
@@ -282,7 +300,7 @@ export function useWorkspace(): UseWorkspaceReturn {
         updatedAt: Date.now(),
       };
     });
-    toast.success("Reverted all files");
+    toast.success('Reverted all files');
   }, []);
 
   const resetWorkspace = useCallback(async () => {
@@ -290,36 +308,39 @@ export function useWorkspace(): UseWorkspaceReturn {
     setWorkspace(null);
     setDraftWorkspace(null);
     setPendingChanges({});
-    toast.success("Workspace reset");
+    toast.success('Workspace reset');
   }, []);
 
-  const acceptPendingChange = useCallback((path: string) => {
-    const validation = validatePath(path);
-    if (!validation.valid) {
-      toast.error(getPathValidationErrorMessage(path, validation));
-      return;
-    }
-    const change = pendingChanges[path];
-    if (!change) return;
-
-    setWorkspace((prev) => {
-      if (!prev) {
-        return workspaceFromSingleFile(change.content, change.language, path);
+  const acceptPendingChange = useCallback(
+    (path: string) => {
+      const validation = validatePath(path);
+      if (!validation.valid) {
+        toast.error(getPathValidationErrorMessage(path, validation));
+        return;
       }
-      return {
-        ...prev,
-        files: { ...prev.files, [path]: change.content },
-        updatedAt: Date.now(),
-      };
-    });
+      const change = pendingChanges[path];
+      if (!change) return;
 
-    setPendingChanges((prev) => {
-      const updated = { ...prev };
-      delete updated[path];
-      return updated;
-    });
-    toast.success(`Accepted changes to ${path}`);
-  }, [pendingChanges]);
+      setWorkspace((prev) => {
+        if (!prev) {
+          return workspaceFromSingleFile(change.content, change.language, path);
+        }
+        return {
+          ...prev,
+          files: { ...prev.files, [path]: change.content },
+          updatedAt: Date.now(),
+        };
+      });
+
+      setPendingChanges((prev) => {
+        const updated = { ...prev };
+        delete updated[path];
+        return updated;
+      });
+      toast.success(`Accepted changes to ${path}`);
+    },
+    [pendingChanges],
+  );
 
   const rejectPendingChange = useCallback((path: string) => {
     setPendingChanges((prev) => {
@@ -352,8 +373,11 @@ export function useWorkspace(): UseWorkspaceReturn {
         const firstPath = Object.keys(newFiles)[0];
         return {
           version: 1 as const,
-          mode: Object.keys(newFiles).length > 1 ? "project" as const : "single" as const,
-          projectName: "project",
+          mode:
+            Object.keys(newFiles).length > 1
+              ? ('project' as const)
+              : ('single' as const),
+          projectName: 'project',
           activePath: firstPath,
           files: newFiles,
           baseFiles: { ...newFiles },
@@ -370,33 +394,36 @@ export function useWorkspace(): UseWorkspaceReturn {
     });
 
     setPendingChanges({});
-    toast.success("Accepted all pending changes");
+    toast.success('Accepted all pending changes');
   }, [pendingChanges]);
 
   const rejectAllPendingChanges = useCallback(() => {
     setPendingChanges({});
-    toast.success("Rejected all pending changes");
+    toast.success('Rejected all pending changes');
   }, []);
 
-  const updateWorkspaceFromOutput = useCallback((output: ProjectOutput, mode?: "plan" | "build") => {
-    // Update workspace in both plan and build modes
-    setWorkspace((prev) => {
-      const next = workspaceFromProjectOutput(output);
+  const updateWorkspaceFromOutput = useCallback(
+    (output: ProjectOutput, mode?: 'plan' | 'build') => {
+      // Update workspace in both plan and build modes
+      setWorkspace((prev) => {
+        const next = workspaceFromProjectOutput(output);
 
-      if (prev) {
-        return {
-          ...prev,
-          files: { ...prev.files, ...next.files },
-          baseFiles: prev.baseFiles || next.baseFiles,
-          projectName: next.projectName || prev.projectName,
-          checkpoints: prev.checkpoints,
-          updatedAt: Date.now(),
-        };
-      }
+        if (prev) {
+          return {
+            ...prev,
+            files: { ...prev.files, ...next.files },
+            baseFiles: prev.baseFiles || next.baseFiles,
+            projectName: next.projectName || prev.projectName,
+            checkpoints: prev.checkpoints,
+            updatedAt: Date.now(),
+          };
+        }
 
-      return next;
-    });
-  }, []);
+        return next;
+      });
+    },
+    [],
+  );
 
   return {
     workspace,

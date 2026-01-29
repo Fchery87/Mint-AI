@@ -192,9 +192,21 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
         setPlan(parsedPlan as Parameters<typeof setPlan>[0]);
       },
       onWorkspaceUpdate: (output) => {
-        if (mode === 'build') {
-          updateWorkspaceFromOutput(output, mode);
-        }
+        // Update workspace in both Plan and Build modes
+        updateWorkspaceFromOutput(output, mode);
+      },
+      onPendingChange: (path, before, after) => {
+        // Populate pending changes for review flow
+        setPendingChanges((prev) => ({
+          ...prev,
+          [path]: {
+            path,
+            content: after,
+            language: path.split('.').pop() || 'text',
+            originalContent: before || undefined,
+            status: before ? 'modified' : 'new',
+          },
+        }));
       },
       onCheckpoint: () => {
         if (workspace) {
@@ -206,7 +218,7 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
         addTerminalLine(content, type);
       },
     });
-  }, [sendMessage, mode, webSearch, currentPlan, setPlan, updateWorkspaceFromOutput, workspace, createCheckpoint, addTerminalLine, buildContextSnapshot]);
+  }, [sendMessage, mode, webSearch, currentPlan, setPlan, updateWorkspaceFromOutput, setPendingChanges, workspace, createCheckpoint, addTerminalLine, buildContextSnapshot]);
 
   // Pending changes handlers
   const handleOpenDiffModal = useCallback((path: string) => {
