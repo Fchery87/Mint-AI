@@ -1,6 +1,6 @@
 import { useRef, useState, memo, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { Loader2, Sparkles, ClipboardList, Hammer, Plus, MoreHorizontal, HelpCircle, Send } from "lucide-react";
+import { Loader2, Sparkles, ClipboardList, Hammer, Plus, MoreHorizontal, HelpCircle, Send, Check, Eye } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { SkillChainItem } from "@/components/SkillComposer";
 import MessageItem, { type ChatMessage, type ThinkingItem } from "@/components/MessageItem";
@@ -304,6 +304,34 @@ function ChatPanelComponent({
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Plan Approval Actions - Show when plan is ready and no unanswered questions */}
+      {mode === "plan" && planStatus === PlanStatus.READY && !hasUnansweredQuestions && (
+        <div className="px-4 py-3 border-t border-border bg-accent/5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+              <span className="text-sm font-medium text-foreground">Plan ready for approval</span>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={onReviewPlan}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border border-border bg-card hover:bg-muted transition-colors"
+              >
+                <Eye size={14} />
+                Review
+              </button>
+              <button
+                onClick={onApprovePlan}
+                className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-semibold rounded-lg bg-accent text-accent-foreground hover:bg-accent/90 transition-colors shadow-sm"
+              >
+                <Check size={14} />
+                Approve & Build
+              </button>
+            </div>
           </div>
         </div>
       )}
