@@ -8,7 +8,7 @@ import { PlanContentRenderer } from '@/components/PlanContentRenderer';
 import { EnhancedMessageContent } from '@/components/EnhancedMessageContent';
 import { SkillType } from '@/types/skill';
 import { PlanStatus } from '@/types/plan-build';
-import { CheckCircle, Loader2, Terminal, FileCode, Search, ChevronDown } from 'lucide-react';
+import { CheckCircle, Loader2, Terminal, FileCode, Search, ChevronDown, GitCompare, Play, Beaker, XCircle } from 'lucide-react';
 import { useState, memo, useMemo } from 'react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,11 +64,20 @@ interface MessageItemProps {
 
 function ToolActivityBlock({ tool }: { tool: ToolItem }) {
   const getToolIcon = (name: string) => {
-    if (name.includes('file') || name.includes('write') || name.includes('read')) {
+    if (name.includes('file') || name.includes('write') || name.includes('read') || name.includes('create')) {
       return <FileCode className="w-3.5 h-3.5" />;
     }
-    if (name.includes('search') || name.includes('web')) {
+    if (name.includes('search') || name.includes('web') || name.includes('find')) {
       return <Search className="w-3.5 h-3.5" />;
+    }
+    if (name.includes('diff') || name.includes('patch')) {
+      return <GitCompare className="w-3.5 h-3.5" />;
+    }
+    if (name.includes('command') || name.includes('run') || name.includes('exec')) {
+      return <Play className="w-3.5 h-3.5" />;
+    }
+    if (name.includes('test')) {
+      return <Beaker className="w-3.5 h-3.5" />;
     }
     return <Terminal className="w-3.5 h-3.5" />;
   };
@@ -95,9 +104,25 @@ function ToolActivityBlock({ tool }: { tool: ToolItem }) {
     }
   };
 
+  const getStatusBg = (status: string) => {
+    switch (status) {
+      case 'running':
+        return 'bg-accent/10 border-accent/30';
+      case 'complete':
+        return 'bg-emerald-500/10 border-emerald-500/30';
+      case 'error':
+        return 'bg-destructive/10 border-destructive/30';
+      default:
+        return 'bg-muted border-border';
+    }
+  };
+
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-accent/5 border border-accent/20 rounded-md">
-      <span className={cn("text-accent", getStatusColor(tool.status))}>
+    <div className={cn(
+      "flex items-center gap-2 px-3 py-2 rounded-lg border transition-all duration-200",
+      getStatusBg(tool.status)
+    )}>
+      <span className={cn("flex-shrink-0", getStatusColor(tool.status))}>
         {getToolIcon(tool.toolName)}
       </span>
       <span className="text-xs font-medium text-foreground">
@@ -109,7 +134,10 @@ function ToolActivityBlock({ tool }: { tool: ToolItem }) {
       {tool.status === 'complete' && (
         <CheckCircle className="w-3 h-3 ml-auto text-emerald-500" />
       )}
-      {tool.message && (
+      {tool.status === 'error' && (
+        <XCircle className="w-3 h-3 ml-auto text-destructive" />
+      )}
+      {tool.message && tool.status !== 'running' && tool.status !== 'complete' && tool.status !== 'error' && (
         <span className="text-muted-foreground truncate max-w-[150px] text-xs">
           {tool.message}
         </span>
@@ -125,24 +153,35 @@ function ToolActivityBlock({ tool }: { tool: ToolItem }) {
 function ToolResultsBlock({ results }: { results: string }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const lines = results.trim().split('\n');
-  const isLong = lines.length > 5;
+  const isLong = lines.length > 8;
+
+  // Parse results to show summary
+  const resultCount = results.split('[').length - 1;
+  const hasErrors = results.toLowerCase().includes('error');
 
   return (
-    <div className="w-full max-w-[85%] bg-muted/50 border border-border rounded-lg overflow-hidden">
+    <div className="w-full max-w-[90%] bg-slate-900/50 border border-slate-700/50 rounded-lg overflow-hidden shadow-sm">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/70 transition-colors"
+        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-slate-800/50 transition-colors group"
       >
-        <div className="w-2 h-2 rounded-full bg-accent" />
-        <span className="text-muted-foreground text-xs">Workspace Action Result</span>
-        {isLong && (
-          <ChevronDown
-            className={cn(
-              'w-3 h-3 ml-auto text-muted-foreground transition-transform',
-              isExpanded && 'rotate-180'
-            )}
-          />
-        )}
+        <div className={cn(
+          "w-2 h-2 rounded-full",
+          hasErrors ? "bg-red-500" : "bg-emerald-500"
+        )} />
+        <span className="text-slate-300 text-xs font-medium">
+          {hasErrors ? 'Tool Execution Results' : 'Tool Execution Results'}
+        </span>
+        <span className="text-slate-500 text-xs">
+          ({resultCount} {resultCount === 1 ? 'action' : 'actions'})
+        </span>
+        <ChevronDown
+          className={cn(
+            'w-4 h-4 ml-auto text-slate-500 transition-transform duration-200',
+            isExpanded && 'rotate-180',
+            'group-hover:text-slate-400'
+          )}
+        />
       </button>
       <AnimatePresence initial={false}>
         {(!isLong || isExpanded) && (
@@ -150,14 +189,24 @@ function ToolResultsBlock({ results }: { results: string }) {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <pre className="px-3 py-2 font-mono text-xs text-muted-foreground whitespace-pre-wrap border-t border-border">
-              {results.trim()}
-            </pre>
+            <div className="border-t border-slate-700/50">
+              <pre className="px-4 py-3 font-mono text-xs text-slate-300 whitespace-pre-wrap overflow-x-auto max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                {results.trim()}
+              </pre>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
+      {isLong && !isExpanded && (
+        <div className="px-4 py-2 border-t border-slate-700/50 bg-slate-900/30">
+          <span className="text-slate-500 text-xs">
+            {lines.length} lines total. Click to expand.
+          </span>
+        </div>
+      )}
     </div>
   );
 }

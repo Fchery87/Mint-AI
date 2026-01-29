@@ -9,6 +9,8 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import * as Sentry from "@sentry/nextjs";
 import type { WorkspaceState, PendingChange } from "@/types/workspace";
+
+export type { WorkspaceState };
 import type { ProjectOutput } from "@/lib/project-types";
 import {
   createCheckpoint,

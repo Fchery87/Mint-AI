@@ -47,6 +47,7 @@ export interface SendMessageOptions {
     currentStepIndex: number;
     steps: Array<{ title: string }>;
   } | null;
+  contextSnapshot?: import("@/types/context-snapshot").ContextSnapshot;
   onPlanParsed?: (plan: unknown) => void;
   onWorkspaceUpdate?: (output: ProjectOutput) => void;
   onCheckpoint?: () => void;
@@ -147,6 +148,7 @@ export function useChat(): UseChatReturn {
         outputFormat: detectedLanguage,
         mode,
         webSearch,
+        contextSnapshot: options.contextSnapshot,
         ...(mode === "build" && currentPlan
           ? {
               planId: currentPlan.id,
@@ -314,8 +316,8 @@ export function useChat(): UseChatReturn {
                   const parsed = parseProjectOutput(accumulatedCode);
                   if (parsed.type === "project" && parsed.files.length > 0) {
                     setProjectOutput(parsed);
-                    // Update workspace in real-time during streaming
-                    if (onWorkspaceUpdate) {
+                    // Update workspace in real-time during streaming (Build mode only)
+                    if (onWorkspaceUpdate && mode === "build") {
                       onWorkspaceUpdate(parsed);
                     }
                   }
@@ -332,8 +334,8 @@ export function useChat(): UseChatReturn {
                   const parsedOutput = parseProjectOutput(data.code);
                   setProjectOutput(parsedOutput);
 
-                  // Update workspace when code is generated (any mode)
-                  if (onWorkspaceUpdate) {
+                  // Update workspace when code is generated (Build mode only)
+                  if (onWorkspaceUpdate && mode === "build") {
                     onWorkspaceUpdate(parsedOutput);
                   }
                 }
@@ -368,6 +370,115 @@ export function useChat(): UseChatReturn {
                     return updated;
                   });
                 }
+                break;
+              }
+
+              case "tool-call": {
+                const toolName = data.tool;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const existingTools = updated[assistantIndex].tools || [];
+                  const existingIndex = existingTools.findIndex(
+                    (t) => t.toolName === toolName && t.status === 'running'
+                  );
+
+                  const newTool: import("@/types/chat").ToolItem = {
+                    toolName: toolName,
+                    status: 'running',
+                    message: `Calling ${toolName}...`,
+                  };
+
+                  if (existingIndex >= 0) {
+                    existingTools[existingIndex] = newTool;
+                  } else {
+                    existingTools.push(newTool);
+                  }
+
+                  updated[assistantIndex] = {
+                    ...updated[assistantIndex],
+                    tools: [...existingTools],
+                  };
+                  return updated;
+                });
+                break;
+              }
+
+              case "tool-result": {
+                const { callId, result, error } = data;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const existingTools = updated[assistantIndex].tools || [];
+                  const toolIndex = existingTools.findIndex(
+                    (t) => t.status === 'running'
+                  );
+
+                  if (toolIndex >= 0) {
+                    existingTools[toolIndex] = {
+                      ...existingTools[toolIndex],
+                      status: error ? 'error' : 'complete',
+                      message: error || 'Complete',
+                    };
+                  }
+
+                  // Add tool results to message
+                  const currentResults = updated[assistantIndex].toolResults || '';
+                  const resultText = error 
+                    ? `[Error] ${existingTools[toolIndex]?.toolName}: ${error}\n`
+                    : `[${existingTools[toolIndex]?.toolName}] ${JSON.stringify(result, null, 2)}\n`;
+
+                  updated[assistantIndex] = {
+                    ...updated[assistantIndex],
+                    tools: [...existingTools],
+                    toolResults: currentResults + resultText,
+                  };
+                  return updated;
+                });
+                break;
+              }
+
+              case "file-diff": {
+                const { path, before, after } = data;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const currentResults = updated[assistantIndex].toolResults || '';
+                  
+                  updated[assistantIndex] = {
+                    ...updated[assistantIndex],
+                    toolResults: currentResults + `[File Diff: ${path}]\n--- Before ---\n${before}\n\n--- After ---\n${after}\n\n`,
+                  };
+                  return updated;
+                });
+                break;
+              }
+
+              case "progress": {
+                const { taskId, status, message } = data;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const currentContent = updated[assistantIndex].content || '';
+                  const progressMsg = `[Progress: ${taskId}] ${status}${message ? ` - ${message}` : ''}`;
+                  
+                  updated[assistantIndex] = {
+                    ...updated[assistantIndex],
+                    content: currentContent + '\n' + progressMsg,
+                  };
+                  return updated;
+                });
+                break;
+              }
+
+              case "command-output": {
+                const { command, output, exitCode } = data;
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const currentResults = updated[assistantIndex].toolResults || '';
+                  
+                  updated[assistantIndex] = {
+                    ...updated[assistantIndex],
+                    toolResults: currentResults + `[Command: ${command}]\nExit Code: ${exitCode}\n${output}\n\n`,
+                  };
+                  return updated;
+                });
                 break;
               }
 

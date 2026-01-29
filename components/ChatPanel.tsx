@@ -1,6 +1,6 @@
 import { useRef, useState, memo, useCallback, useMemo } from "react";
 import dynamic from "next/dynamic";
-import { Loader2, Sparkles, ClipboardList, Hammer, Plus, MoreHorizontal } from "lucide-react";
+import { Loader2, Sparkles, ClipboardList, Hammer, Plus, MoreHorizontal, HelpCircle, Send } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import type { SkillChainItem } from "@/components/SkillComposer";
 import MessageItem, { type ChatMessage, type ThinkingItem } from "@/components/MessageItem";
@@ -40,6 +40,14 @@ const SkillComposer = dynamic(
 
 export type { ChatMessage, ThinkingItem };
 
+interface ClarifyingQuestion {
+  id: string;
+  question: string;
+  required: boolean;
+  options?: string[];
+  answer?: string;
+}
+
 interface ChatPanelProps {
   messages: ChatMessage[];
   isLoading: boolean;
@@ -56,6 +64,8 @@ interface ChatPanelProps {
   planStatus?: PlanStatus;
   canStartBuild?: boolean;
   hasUnansweredQuestions?: boolean;
+  clarifyingQuestions?: ClarifyingQuestion[];
+  onAnswerQuestion?: (questionId: string, answer: string) => void;
   onApprovePlan?: () => void;
   onReviewPlan?: () => void;
   onRunCode?: (code: string, language: string) => void;
@@ -76,6 +86,8 @@ function ChatPanelComponent({
   planStatus,
   canStartBuild,
   hasUnansweredQuestions,
+  clarifyingQuestions = [],
+  onAnswerQuestion,
   onApprovePlan,
   onReviewPlan,
   onRunCode,
@@ -86,12 +98,33 @@ function ChatPanelComponent({
 }: ChatPanelProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [showSkillComposer, setShowSkillComposer] = useState(false);
+  const [questionAnswers, setQuestionAnswers] = useState<Record<string, string>>({});
 
   const handleSubmit = useCallback((message: PromptInputMessage) => {
     if (message.text.trim() && !isLoading) {
       onSendMessage(message.text);
     }
   }, [isLoading, onSendMessage]);
+
+  // Mode-specific suggestions
+  const planModeSuggestions = [
+    "Design a new feature for my app",
+    "Analyze this codebase structure",
+    "Create an implementation plan",
+  ];
+
+  const buildModeSuggestions = [
+    "Create a React component",
+    "Build a REST API endpoint",
+    "Add authentication to my app",
+  ];
+
+  const suggestions = mode === "plan" ? planModeSuggestions : buildModeSuggestions;
+
+  // Mode-specific placeholder
+  const placeholderText = mode === "plan"
+    ? "Describe what you want to build. I'll create a detailed plan..."
+    : "Ask me to implement the next step or make changes...";
 
   const messageList = useMemo(() => messages.map((msg, idx) => (
     <MessageItem
@@ -148,13 +181,25 @@ function ChatPanelComponent({
           Plan
         </button>
         <button
-          onClick={() => onModeChange?.("build")}
+          onClick={() => {
+            // Only allow switching to build if plan is approved
+            if (canStartBuild || planStatus === 'approved') {
+              onModeChange?.("build");
+            } else {
+              // Could show a toast here, but for now just prevent the switch
+              console.warn('Cannot switch to Build mode: Plan not approved');
+            }
+          }}
+          disabled={!canStartBuild && planStatus !== 'approved'}
           className={cn(
             "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all",
             mode === "build"
               ? "bg-accent text-white shadow-sm"
+              : !canStartBuild && planStatus !== 'approved'
+              ? "text-muted-foreground/50 cursor-not-allowed"
               : "text-muted-foreground hover:text-foreground hover:bg-muted"
           )}
+          title={!canStartBuild && planStatus !== 'approved' ? "Approve a plan first to enable Build mode" : "Switch to Build mode"}
         >
           <Hammer size={14} />
           Build
@@ -175,11 +220,7 @@ function ChatPanelComponent({
               </p>
             </div>
             <div className="grid gap-2 w-full max-w-xs">
-              {[
-                "Create a React component",
-                "Explain this code",
-                "Build a REST API",
-              ].map((suggestion) => (
+              {suggestions.map((suggestion) => (
                 <button
                   key={suggestion}
                   onClick={() => onSendMessage(suggestion)}
@@ -198,6 +239,86 @@ function ChatPanelComponent({
         )}
       </div>
 
+      {/* Clarifying Questions - Only show in Plan mode with unanswered questions */}
+      {mode === "plan" && clarifyingQuestions.length > 0 && (
+        <div className="px-4 py-3 border-t border-border bg-amber-500/5">
+          <div className="flex items-center gap-2 mb-2">
+            <HelpCircle size={16} className="text-amber-500" />
+            <span className="text-sm font-medium">Questions for You</span>
+            {hasUnansweredQuestions && (
+              <span className="text-xs bg-amber-500/20 text-amber-600 dark:text-amber-400 px-2 py-0.5 rounded-full">
+                Action needed
+              </span>
+            )}
+          </div>
+          <div className="space-y-2">
+            {clarifyingQuestions.filter(q => !q.answer).map((question) => (
+              <div key={question.id} className="p-2 rounded bg-card border border-border">
+                <p className="text-sm mb-2">
+                  {question.question}
+                  {question.required && <span className="text-red-500 ml-1">*</span>}
+                </p>
+                {question.options ? (
+                  <div className="flex flex-wrap gap-2">
+                    {question.options.map((option) => (
+                      <button
+                        key={option}
+                        onClick={() => {
+                          onAnswerQuestion?.(question.id, option);
+                        }}
+                        className="px-3 py-1 text-xs bg-background border border-border rounded hover:bg-muted transition-colors"
+                      >
+                        {option}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={questionAnswers[question.id] || ""}
+                      onChange={(e) => setQuestionAnswers(prev => ({ ...prev, [question.id]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const answer = questionAnswers[question.id];
+                          if (answer?.trim()) {
+                            onAnswerQuestion?.(question.id, answer.trim());
+                            setQuestionAnswers(prev => {
+                              const next = { ...prev };
+                              delete next[question.id];
+                              return next;
+                            });
+                          }
+                        }
+                      }}
+                      placeholder="Type your answer..."
+                      className="flex-1 px-3 py-1.5 text-sm bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent/50"
+                    />
+                    <button
+                      onClick={() => {
+                        const answer = questionAnswers[question.id];
+                        if (answer?.trim()) {
+                          onAnswerQuestion?.(question.id, answer.trim());
+                          setQuestionAnswers(prev => {
+                            const next = { ...prev };
+                            delete next[question.id];
+                            return next;
+                          });
+                        }
+                      }}
+                      disabled={!questionAnswers[question.id]?.trim()}
+                      className="px-3 py-1.5 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Send size={14} />
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Input Area */}
       <div className="p-4 border-t border-border bg-sidebar">
         <PromptInputProvider onSubmit={handleSubmit}>
@@ -212,7 +333,7 @@ function ChatPanelComponent({
             <PromptInputBody>
               <PromptInputTextarea
                 ref={textareaRef}
-                placeholder="Type something..."
+                placeholder={placeholderText}
                 className="placeholder:text-muted-foreground/60 min-h-[44px] max-h-32"
               />
             </PromptInputBody>
@@ -246,6 +367,7 @@ export default memo(ChatPanelComponent, (prevProps, nextProps) => {
     prevProps.mode === nextProps.mode &&
     prevProps.planStatus === nextProps.planStatus &&
     prevProps.canStartBuild === nextProps.canStartBuild &&
-    prevProps.hasUnansweredQuestions === nextProps.hasUnansweredQuestions
+    prevProps.hasUnansweredQuestions === nextProps.hasUnansweredQuestions &&
+    prevProps.clarifyingQuestions === nextProps.clarifyingQuestions
   );
 });

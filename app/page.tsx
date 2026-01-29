@@ -10,6 +10,7 @@ import WorkspacePanel from "@/components/WorkspacePanel";
 import { ClaudeLayout } from "@/components/ClaudeLayout";
 import FileExplorer from "@/components/FileExplorer";
 import ChatPanel from "@/components/ChatPanel";
+import { BuildExecutionPanel } from "@/components/BuildExecutionPanel";
 import { Header } from "@/components/HeaderPlanBuild";
 import { unifiedDiffForFiles } from "@/lib/diff";
 import { downloadProjectAsZip, downloadTextFile } from "@/lib/download";
@@ -18,6 +19,7 @@ import { PlanReviewModal } from "@/components/PlanReviewModal";
 import { useChat } from "@/hooks/useChat";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useTerminal } from "@/hooks/useTerminal";
+import { useContextSnapshot } from "@/hooks/useContextSnapshot";
 import { cn } from "@/lib/utils";
 
 export default function Home() {
@@ -164,8 +166,18 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
     setShowPlanReviewModal(true);
   }, [currentPlan?.id]);
 
+  // Context snapshot hook
+  const { buildContextSnapshot } = useContextSnapshot({
+    workspace,
+    mode,
+    planId: currentPlan?.id,
+    currentStepIndex: currentPlan?.currentStepIndex,
+  });
+
   // Wrapper for sendMessage that integrates with workspace and plan
   const handleSendMessage = useCallback(async (message: string) => {
+    const contextSnapshot = buildContextSnapshot();
+    
     await sendMessage(message, {
       mode,
       webSearch,
@@ -175,11 +187,14 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
         currentStepIndex: currentPlan.currentStepIndex,
         steps: currentPlan.steps,
       } : null,
+      contextSnapshot,
       onPlanParsed: (parsedPlan) => {
         setPlan(parsedPlan as Parameters<typeof setPlan>[0]);
       },
       onWorkspaceUpdate: (output) => {
-        updateWorkspaceFromOutput(output, mode);
+        if (mode === 'build') {
+          updateWorkspaceFromOutput(output, mode);
+        }
       },
       onCheckpoint: () => {
         if (workspace) {
@@ -191,7 +206,7 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
         addTerminalLine(content, type);
       },
     });
-  }, [sendMessage, mode, webSearch, currentPlan, setPlan, updateWorkspaceFromOutput, workspace, createCheckpoint, addTerminalLine]);
+  }, [sendMessage, mode, webSearch, currentPlan, setPlan, updateWorkspaceFromOutput, workspace, createCheckpoint, addTerminalLine, buildContextSnapshot]);
 
   // Pending changes handlers
   const handleOpenDiffModal = useCallback((path: string) => {
@@ -440,6 +455,8 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
               planStatus={currentPlan?.status}
               canStartBuild={canStartBuild}
               hasUnansweredQuestions={hasUnansweredQuestions}
+              clarifyingQuestions={currentPlan?.clarifyingQuestions}
+              onAnswerQuestion={planBuildContext.answerQuestion}
               onApprovePlan={handleApprovePlan}
               onReviewPlan={handleReviewPlan}
               onRunCode={handleRunCode}

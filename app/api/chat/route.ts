@@ -61,6 +61,27 @@ const chatRequestSchema = z.object({
   // Plan context for Build mode
   planId: z.string().optional(),
   currentStepIndex: z.number().optional(),
+  // Context snapshot from frontend
+  contextSnapshot: z.object({
+    editor: z.object({
+      activeFilePath: z.string().nullable(),
+      activeFileContent: z.string().optional(),
+      selection: z.object({
+        start: z.object({ line: z.number(), column: z.number() }),
+        end: z.object({ line: z.number(), column: z.number() }),
+      }).optional(),
+    }),
+    workspace: z.object({
+      workspaceId: z.string(),
+      openFiles: z.array(z.string()),
+      projectName: z.string().optional(),
+      rootPath: z.string().optional(),
+    }),
+    mode: z.enum(['plan', 'build']),
+    planId: z.string().optional(),
+    currentStepIndex: z.number().optional(),
+    timestamp: z.number(),
+  }).optional(),
 });
 
 export interface ChatRequest {
@@ -421,6 +442,9 @@ Each tag should be sent separately.`,
       }
     }
 
+    // Extract context snapshot if provided
+    const contextSnapshot = validationResult.data.contextSnapshot;
+
     // Build mode: Add approved plan context
     let planContext: string | null = null;
     if (mode === 'build' && validationResult.data.planId) {
@@ -438,6 +462,15 @@ IMPORTANT RULES:
 Current step index: ${validationResult.data.currentStepIndex || 0}`;
     }
 
+    // Add context snapshot to system prompt if available
+    let contextPrompt = '';
+    if (contextSnapshot) {
+      contextPrompt = `\n\nCURRENT WORKSPACE CONTEXT:
+- Active file: ${contextSnapshot.editor.activeFilePath || 'none'}
+- Open files: ${contextSnapshot.workspace.openFiles.join(', ') || 'none'}
+- Project: ${contextSnapshot.workspace.projectName || 'unknown'}`;
+    }
+
     // Call LLM API with streaming (include usage data)
     const stream = await client.chat.completions.create({
       model: provider.model,
@@ -448,6 +481,9 @@ Current step index: ${validationResult.data.currentStepIndex || 0}`;
           : []),
         ...(planContext
           ? [{ role: 'system', content: planContext } as const]
+          : []),
+        ...(contextPrompt
+          ? [{ role: 'system', content: contextPrompt } as const]
           : []),
         ...history,
       ],

@@ -71,6 +71,8 @@ export interface ChatRequest {
   planId?: string;
   /** Current step index for Build mode */
   currentStepIndex?: number;
+  /** Context snapshot of current editor/workspace state */
+  contextSnapshot?: import('./context-snapshot').ContextSnapshot;
 }
 
 /**

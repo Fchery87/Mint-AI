@@ -32,6 +32,11 @@ export type SSEEvent =
   | { type: 'explanation-chunk'; content: string }
   | { type: 'code-chunk'; content: string }
   | { type: 'file-marker'; marker: string }
+  | { type: 'tool-call'; tool: string; args: Record<string, unknown>; callId: string }
+  | { type: 'tool-result'; callId: string; result: unknown; error?: string }
+  | { type: 'file-diff'; path: string; before: string; after: string }
+  | { type: 'progress'; taskId: string; status: 'started' | 'completed' | 'failed'; message?: string }
+  | { type: 'command-output'; command: string; output: string; exitCode: number }
   | { type: 'done' }
   | { type: 'error'; error: string };
 
