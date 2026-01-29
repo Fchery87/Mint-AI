@@ -210,11 +210,13 @@ function parseContentBlocks(content: string): ContentBlock[] {
   for (const section of sections) {
     if (!section.trim()) continue;
     
-    // Check if this is a section header
-    const headerMatch = section.match(/^###\s+(\d+)\.\s+(.+?)(?:\n|$)/);
+    // Check if this is a numbered section header (### 1. Title)
+    const numberedHeaderMatch = section.match(/^###\s+(\d+)\.\s+(.+?)(?:\n|$)/);
+    // Also match non-numbered headers (### Title)
+    const plainHeaderMatch = section.match(/^###\s+([^\d][^\n]+)(?:\n|$)/);
     
-    if (headerMatch) {
-      const [, number, title] = headerMatch;
+    if (numberedHeaderMatch) {
+      const [, number, title] = numberedHeaderMatch;
       const sectionContent = section.replace(/^###\s+\d+\.\s+.+?\n?/, '').trim();
       
       blocks.push({
@@ -249,6 +251,20 @@ function parseContentBlocks(content: string): ContentBlock[] {
         else if (sectionContent.trim()) {
           blocks.push({ type: 'text', content: sectionContent });
         }
+      }
+    } else if (plainHeaderMatch) {
+      // Non-numbered header like "### Requirements"
+      const [, title] = plainHeaderMatch;
+      const sectionContent = section.replace(/^###\s+[^\n]+\n?/, '').trim();
+      
+      blocks.push({
+        type: 'section',
+        sectionTitle: title.trim(),
+      });
+      
+      // Add the content as text block
+      if (sectionContent.trim()) {
+        blocks.push({ type: 'text', content: sectionContent });
       }
     } else {
       // Not a section header - check for standalone elements
@@ -393,9 +409,41 @@ export function PlanContentRenderer({
 
           case 'text':
             return (
-              <p key={i} className="text-sm text-muted-foreground leading-relaxed">
-                {block.content}
-              </p>
+              <div key={i} className="text-sm text-muted-foreground leading-relaxed space-y-2">
+                {block.content!.split('\n\n').map((paragraph, pi) => {
+                  // Check if paragraph is a list
+                  const lines = paragraph.split('\n').filter(l => l.trim());
+                  const isNumberedList = lines.every(l => /^\d+\.\s/.test(l.trim()));
+                  const isBulletList = lines.every(l => /^[-*•]\s/.test(l.trim()));
+                  
+                  if (isNumberedList || isBulletList) {
+                    return (
+                      <ul key={pi} className={cn(
+                        "space-y-1 pl-4",
+                        isNumberedList ? "list-decimal" : "list-disc"
+                      )}>
+                        {lines.map((line, li) => (
+                          <li key={li} className="text-sm">
+                            {line.replace(/^(\d+\.\s|[-*•]\s)/, '')}
+                          </li>
+                        ))}
+                      </ul>
+                    );
+                  }
+                  
+                  // Regular paragraph - preserve line breaks
+                  return (
+                    <p key={pi} className="text-sm">
+                      {paragraph.split('\n').map((line, li, arr) => (
+                        <span key={li}>
+                          {line}
+                          {li < arr.length - 1 && <br />}
+                        </span>
+                      ))}
+                    </p>
+                  );
+                })}
+              </div>
             );
 
           default:
