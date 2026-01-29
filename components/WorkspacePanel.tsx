@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, memo, useCallback } from "react";
+import dynamic from "next/dynamic";
 import {
   Code,
   Diff,
@@ -25,7 +26,22 @@ import { unifiedDiffForFile } from "@/lib/diff";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
-import Editor from "@monaco-editor/react";
+
+// Lazy load Monaco Editor - heavy component
+const MonacoEditor = dynamic(
+  () => import("@monaco-editor/react"),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-full">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground/60">
+          <div className="w-6 h-6 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
+          <span className="text-xs font-mono">Loading editor...</span>
+        </div>
+      </div>
+    ),
+  }
+);
 
 
 type Tab = "preview" | "editor" | "diff";
@@ -392,9 +408,9 @@ function WorkspacePanelComponent({
                   readOnly={readOnly}
                 />
               )
-            ) : activeTab === "editor" ? (
+            )             : activeTab === "editor" ? (
               <div className="h-full flex flex-col">
-                <Editor
+                <MonacoEditor
                   height="100%"
                   language={activeLanguage}
                   theme={isDark ? "vs-dark" : "light"}
@@ -409,11 +425,6 @@ function WorkspacePanelComponent({
                     automaticLayout: true,
                     padding: { top: 12, bottom: 12 },
                   }}
-                  loading={
-                    <div className="flex items-center justify-center h-full text-muted-foreground/60 text-xs">
-                      Loading editor...
-                    </div>
-                  }
                 />
               </div>
             ) : activeTab === "diff" ? (

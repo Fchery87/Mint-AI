@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from 'react';
+import { memo, useCallback, useState } from 'react';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -23,7 +23,7 @@ const languageMap: Record<string, string> = {
   md: 'markdown',
 };
 
-export function CodeViewer({
+function CodeViewer({
   code,
   language,
   path,
@@ -109,3 +109,15 @@ export function CodeViewer({
     </div>
   );
 }
+
+function areEqual(prevProps: CodeViewerProps, nextProps: CodeViewerProps): boolean {
+  if (prevProps.code !== nextProps.code) return false;
+  if (prevProps.language !== nextProps.language) return false;
+  if (prevProps.path !== nextProps.path) return false;
+  if (prevProps.showLineNumbers !== nextProps.showLineNumbers) return false;
+  // onCopy is a stable callback from parent
+  return true;
+}
+
+export const MemoizedCodeViewer = memo(CodeViewer, areEqual);
+export { CodeViewer };

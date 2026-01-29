@@ -1,12 +1,13 @@
 /**
  * SkillBadge Component
  *
- * Displays the currently active skill with appropriate styling.
+ * Displays the currently active skill with cyberpunk styling.
  */
 
 'use client';
 
 import { SkillType } from '@/types/skill';
+import { Lightbulb, FileText, Terminal, Bug, Eye, Search, MessageSquare } from 'lucide-react';
 
 interface SkillBadgeProps {
   skill: {
@@ -18,41 +19,41 @@ interface SkillBadgeProps {
   showStage?: boolean;
 }
 
-const skillConfig: Record<SkillType, { label: string; color: string; icon: string }> = {
+const skillConfig: Record<SkillType, { label: string; color: string; icon: typeof Lightbulb }> = {
   [SkillType.BRAINSTORM]: {
     label: 'Brainstorm',
-    color: 'bg-purple-100 text-purple-800 border-purple-200',
-    icon: '💡',
+    color: 'bg-primary/10 text-primary border-primary/30',
+    icon: Lightbulb,
   },
   [SkillType.PLAN]: {
     label: 'Plan',
-    color: 'bg-blue-100 text-blue-800 border-blue-200',
-    icon: '📋',
+    color: 'bg-secondary/10 text-secondary border-secondary/30',
+    icon: FileText,
   },
   [SkillType.CODE]: {
     label: 'Code',
-    color: 'bg-green-100 text-green-800 border-green-200',
-    icon: '💻',
+    color: 'bg-emerald-500/10 text-emerald-500 border-emerald-500/30',
+    icon: Terminal,
   },
   [SkillType.DEBUG]: {
     label: 'Debug',
-    color: 'bg-red-100 text-red-800 border-red-200',
-    icon: '🐛',
+    color: 'bg-rose-500/10 text-rose-500 border-rose-500/30',
+    icon: Bug,
   },
   [SkillType.REVIEW]: {
     label: 'Review',
-    color: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    icon: '👀',
+    color: 'bg-amber-500/10 text-amber-500 border-amber-500/30',
+    icon: Eye,
   },
   [SkillType.SEARCH]: {
     label: 'Search',
-    color: 'bg-cyan-100 text-cyan-800 border-cyan-200',
-    icon: '🔍',
+    color: 'bg-cyan-500/10 text-cyan-500 border-cyan-500/30',
+    icon: Search,
   },
   [SkillType.GENERAL]: {
     label: 'Chat',
-    color: 'bg-gray-100 text-gray-800 border-gray-200',
-    icon: '💬',
+    color: 'bg-muted/30 text-muted-foreground border-border/40',
+    icon: MessageSquare,
   },
 };
 
@@ -110,6 +111,7 @@ export function SkillBadge({ skill, size = 'md', showStage = true }: SkillBadgeP
   const config = skillConfig[skill.type] || skillConfig[SkillType.GENERAL];
   const stageLabel = stageLabels[skill.stage] || 'Active';
   const progressMessage = skillProgressMessages[skill.type]?.[skill.stage] || stageLabel;
+  const Icon = config.icon;
 
   return (
     <div
@@ -119,7 +121,7 @@ export function SkillBadge({ skill, size = 'md', showStage = true }: SkillBadgeP
         ${sizeStyles[size]}
       `}
     >
-      <span className="text-base">{config.icon}</span>
+      <Icon className="w-4 h-4" />
       <span>{config.label}</span>
       {showStage && skill.stage !== 'done' && (
         <span className="opacity-75">• {progressMessage}</span>
@@ -134,6 +136,7 @@ export function SkillBadge({ skill, size = 'md', showStage = true }: SkillBadgeP
 export function SkillThinkingIndicator({ skill }: { skill: { type: SkillType; stage: string } }) {
   const config = skillConfig[skill.type] || skillConfig[SkillType.GENERAL];
   const progressMessage = skillProgressMessages[skill.type]?.[skill.stage] || stageLabels[skill.stage] || 'Working...';
+  const Icon = config.icon;
 
   return (
     <div className="flex flex-col gap-1">
@@ -143,7 +146,7 @@ export function SkillThinkingIndicator({ skill }: { skill: { type: SkillType; st
           ${config.color} ${sizeStyles['md']}
         `}
       >
-        <span className="text-base">{config.icon}</span>
+        <Icon className="w-4 h-4" />
         <span>{config.label}</span>
         <div className="flex gap-1">
           <span className="animate-bounce" style={{ animationDelay: '0ms' }}>

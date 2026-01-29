@@ -1,13 +1,14 @@
 "use client";
 
-import { useRef, useEffect, useCallback, useMemo } from "react";
+import { useRef, useEffect, useCallback, useState } from "react";
 import { toast } from "sonner";
+import * as Sentry from "@sentry/nextjs";
+import { Terminal } from "lucide-react";
 import { XTermPanel } from "@/components/terminal/XTermPanel";
 import { TerminalProvider } from "@/components/terminal/TerminalProvider";
 import WorkspacePanel from "@/components/WorkspacePanel";
 import { ClaudeLayout } from "@/components/ClaudeLayout";
 import FileExplorer from "@/components/FileExplorer";
-import { Terminal } from "lucide-react";
 import ChatPanel from "@/components/ChatPanel";
 import { Header } from "@/components/HeaderPlanBuild";
 import { unifiedDiffForFiles } from "@/lib/diff";
@@ -17,13 +18,13 @@ import { PlanReviewModal } from "@/components/PlanReviewModal";
 import { useChat } from "@/hooks/useChat";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useTerminal } from "@/hooks/useTerminal";
-import { useState } from "react";
 
 export default function Home() {
   // Plan/Build context
   const planBuildContext = usePlanBuildContext();
   const {
     mode,
+    switchMode,
     currentPlan,
     setPlan,
     approvePlan,
@@ -87,9 +88,10 @@ export default function Home() {
   const [outputFormat, setOutputFormat] = useState("React");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Claude Layout state
-  const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
-  const [bottomPanelCollapsed, setBottomPanelCollapsed] = useState(false);
+  // Claude Layout state - reorganized for new layout structure
+  const [chatPanelCollapsed, setChatPanelCollapsed] = useState(false);
+  const [filePanelCollapsed, setFilePanelCollapsed] = useState(false);
+  const [terminalPanelCollapsed, setTerminalPanelCollapsed] = useState(false);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -98,6 +100,16 @@ export default function Home() {
 
   // Plan approval handlers
   const handleApprovePlan = useCallback(() => {
+    Sentry.addBreadcrumb({
+      category: 'action',
+      message: 'User approved plan and started build',
+      level: 'info',
+      data: { 
+        planId: currentPlan?.id,
+        planTitle: currentPlan?.title,
+        stepCount: currentPlan?.steps.length 
+      }
+    });
     approvePlan();
     startBuild();
 
@@ -113,8 +125,14 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
   }, [approvePlan, startBuild, currentPlan]);
 
   const handleReviewPlan = useCallback(() => {
+    Sentry.addBreadcrumb({
+      category: 'action',
+      message: 'User opened plan review modal',
+      level: 'info',
+      data: { planId: currentPlan?.id }
+    });
     setShowPlanReviewModal(true);
-  }, []);
+  }, [currentPlan?.id]);
 
   // Wrapper for sendMessage that integrates with workspace and plan
   const handleSendMessage = useCallback(async (message: string) => {
@@ -153,6 +171,12 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
 
   // Enhanced message action handlers
   const handleRunCode = useCallback((_code: string, language: string) => {
+    Sentry.addBreadcrumb({
+      category: 'action',
+      message: 'User ran code',
+      level: 'info',
+      data: { language }
+    });
     addTerminalLine(`Running ${language} code...`, "info");
     toast.info(`Running ${language} code...`);
   }, [addTerminalLine]);
@@ -185,16 +209,29 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
     toast.success("Copied to clipboard");
   }, []);
 
-  // Terminal panel content
-  const terminalPanel = (
-    <TerminalProvider>
-      <XTermPanel
-        onCommand={async (command) => {
-          await executeCommand(command);
-        }}
-      />
-    </TerminalProvider>
-  );
+  // Keyboard shortcuts for panel toggles
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd/Ctrl + 1 to toggle chat panel (left)
+      if ((e.metaKey || e.ctrlKey) && e.key === '1') {
+        e.preventDefault();
+        setChatPanelCollapsed(prev => !prev);
+      }
+      // Cmd/Ctrl + 2 to toggle file panel (right)
+      if ((e.metaKey || e.ctrlKey) && e.key === '2') {
+        e.preventDefault();
+        setFilePanelCollapsed(prev => !prev);
+      }
+      // Cmd/Ctrl + 3 to toggle terminal panel (bottom)
+      if ((e.metaKey || e.ctrlKey) && e.key === '3') {
+        e.preventDefault();
+        setTerminalPanelCollapsed(prev => !prev);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <main className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
@@ -214,54 +251,39 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
         outputFormat={outputFormat}
       />
 
-      {/* Claude Layout - 4 Panel: Files | Chat | Editor | Terminal */}
+      {/* Claude Layout - 3 Panel Horizontal + Bottom Terminal */}
       <div className="flex-1 overflow-hidden">
         <ClaudeLayout
-          leftCollapsed={leftPanelCollapsed}
-          onLeftCollapse={setLeftPanelCollapsed}
-          rightCollapsed={bottomPanelCollapsed}
-          onRightCollapse={setBottomPanelCollapsed}
-          defaultLeftWidth={260}
-          defaultRightWidth={350}
-          minLeftWidth={200}
-          minRightWidth={280}
+          // Left panel - Chat
           leftPanel={
-            <FileExplorer
-              files={workspace?.files || {}}
-              activePath={workspace?.activePath || null}
-              onSelectPath={selectPath}
-              onCreateFile={createFile}
-              onDeleteFile={deleteFile}
-              onRenameFile={renameFile}
-              onCreateFolder={(_path: string) => {
-                toast.info("Folder creation will be available after file creation");
-              }}
-              projectId="mint-ai"
+            <ChatPanel
+              messages={messages}
+              isLoading={isLoading}
+              onSendMessage={handleSendMessage}
+              messagesEndRef={messagesEndRef}
+              status={inputStatus}
+              activeSkill={activeSkill}
+              mode={mode}
+              onModeChange={switchMode}
+              planStatus={currentPlan?.status}
+              canStartBuild={canStartBuild}
+              hasUnansweredQuestions={hasUnansweredQuestions}
+              onApprovePlan={handleApprovePlan}
+              onReviewPlan={handleReviewPlan}
+              onRunCode={handleRunCode}
+              onDiffCode={handleDiffCode}
+              onApplyCode={handleApplyCode}
+              onApplyArtifact={handleApplyArtifact}
+              onCopyCode={handleCopyCode}
             />
           }
-          centerLeftPanel={
-            <div className="h-full flex flex-col bg-card/30">
-              <ChatPanel
-                messages={messages}
-                isLoading={isLoading}
-                onSendMessage={handleSendMessage}
-                messagesEndRef={messagesEndRef}
-                status={inputStatus}
-                activeSkill={activeSkill}
-                planStatus={currentPlan?.status}
-                canStartBuild={canStartBuild}
-                hasUnansweredQuestions={hasUnansweredQuestions}
-                onApprovePlan={handleApprovePlan}
-                onReviewPlan={handleReviewPlan}
-                onRunCode={handleRunCode}
-                onDiffCode={handleDiffCode}
-                onApplyCode={handleApplyCode}
-                onApplyArtifact={handleApplyArtifact}
-                onCopyCode={handleCopyCode}
-              />
-            </div>
-          }
-          centerRightPanel={
+          leftCollapsed={chatPanelCollapsed}
+          onLeftCollapse={setChatPanelCollapsed}
+          defaultLeftWidth={320}
+          minLeftWidth={280}
+          
+          // Center panel - Code Editor (Workspace)
+          centerPanel={
             <div className="h-full flex flex-col">
               <div className="flex-1 rounded-xl border border-border/40 bg-background shadow-sm overflow-hidden relative">
                 {!displayWorkspace && !isLoading && messages.length === 0 ? (
@@ -327,7 +349,42 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
               </div>
             </div>
           }
-          rightPanel={terminalPanel}
+          minCenterWidth={400}
+          
+          // Right panel - File Explorer
+          rightPanel={
+            <FileExplorer
+              files={workspace?.files || {}}
+              activePath={workspace?.activePath || null}
+              onSelectPath={selectPath}
+              onCreateFile={createFile}
+              onDeleteFile={deleteFile}
+              onRenameFile={renameFile}
+              onCreateFolder={(_path: string) => {
+                toast.info("Folder creation will be available after file creation");
+              }}
+              projectId="mint-ai"
+            />
+          }
+          rightCollapsed={filePanelCollapsed}
+          onRightCollapse={setFilePanelCollapsed}
+          defaultRightWidth={260}
+          minRightWidth={200}
+          
+          // Bottom panel - Terminal
+          bottomPanel={
+            <TerminalProvider>
+              <XTermPanel
+                onCommand={async (command) => {
+                  await executeCommand(command);
+                }}
+              />
+            </TerminalProvider>
+          }
+          bottomCollapsed={terminalPanelCollapsed}
+          onBottomCollapse={setTerminalPanelCollapsed}
+          defaultBottomHeight={200}
+          minBottomHeight={120}
         />
       </div>
 

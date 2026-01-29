@@ -7,6 +7,7 @@ import { InteractiveCodeBlock } from '@/components/InteractiveCodeBlock';
 import { ArtifactCard } from '@/components/ArtifactCard';
 import { parseContentSegments } from '@/lib/content-parser';
 import ReactMarkdown from 'react-markdown';
+import { sanitizeChatMessage } from '@/lib/sanitize';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Props
@@ -58,7 +59,7 @@ function TextSegment({ content }: { content: string }) {
           ),
         }}
       >
-        {content}
+        {sanitizeChatMessage(content)}
       </ReactMarkdown>
     </div>
   );

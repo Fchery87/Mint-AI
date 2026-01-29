@@ -13,31 +13,31 @@ interface ThinkingBlockProps {
   className?: string;
 }
 
-// Map thinking types to icons and titles with modern color palette
+// Map thinking types to icons and titles with cyberpunk color palette
 const thinkingTypeConfig: Record<string, { icon: typeof Lightbulb; title: string; color: string; bgGradient: string }> = {
-  requirements: { icon: FileCode, title: 'Requirements', color: 'text-blue-500', bgGradient: 'from-blue-500/10 to-blue-600/5' },
-  considerations: { icon: AlertTriangle, title: 'Considerations', color: 'text-amber-500', bgGradient: 'from-amber-500/10 to-amber-600/5' },
-  approaches: { icon: Lightbulb, title: 'Approaches', color: 'text-violet-500', bgGradient: 'from-violet-500/10 to-violet-600/5' },
-  questions: { icon: Search, title: 'Questions', color: 'text-cyan-500', bgGradient: 'from-cyan-500/10 to-cyan-600/5' },
-  understanding: { icon: Target, title: 'Understanding', color: 'text-blue-500', bgGradient: 'from-blue-500/10 to-blue-600/5' },
-  breakdown: { icon: FileCode, title: 'Breakdown', color: 'text-indigo-500', bgGradient: 'from-indigo-500/10 to-indigo-600/5' },
-  dependencies: { icon: Cpu, title: 'Dependencies', color: 'text-slate-500', bgGradient: 'from-slate-500/10 to-slate-600/5' },
-  challenges: { icon: AlertTriangle, title: 'Challenges', color: 'text-amber-500', bgGradient: 'from-amber-500/10 to-amber-600/5' },
-  architecture: { icon: Cpu, title: 'Architecture', color: 'text-violet-500', bgGradient: 'from-violet-500/10 to-violet-600/5' },
-  components: { icon: FileCode, title: 'Components', color: 'text-emerald-500', bgGradient: 'from-emerald-500/10 to-emerald-600/5' },
-  edgecases: { icon: AlertTriangle, title: 'Edge Cases', color: 'text-rose-500', bgGradient: 'from-rose-500/10 to-rose-600/5' },
-  analysis: { icon: Search, title: 'Analysis', color: 'text-blue-500', bgGradient: 'from-blue-500/10 to-blue-600/5' },
-  hypothesis: { icon: Lightbulb, title: 'Hypothesis', color: 'text-violet-500', bgGradient: 'from-violet-500/10 to-violet-600/5' },
-  investigation: { icon: Search, title: 'Investigation', color: 'text-cyan-500', bgGradient: 'from-cyan-500/10 to-cyan-600/5' },
-  solution: { icon: CheckCircle, title: 'Solution', color: 'text-emerald-500', bgGradient: 'from-emerald-500/10 to-emerald-600/5' },
-  overview: { icon: Target, title: 'Overview', color: 'text-blue-500', bgGradient: 'from-blue-500/10 to-blue-600/5' },
-  correctness: { icon: CheckCircle, title: 'Correctness', color: 'text-emerald-500', bgGradient: 'from-emerald-500/10 to-emerald-600/5' },
-  bestpractices: { icon: Cpu, title: 'Best Practices', color: 'text-violet-500', bgGradient: 'from-violet-500/10 to-violet-600/5' },
-  improvements: { icon: Lightbulb, title: 'Improvements', color: 'text-amber-500', bgGradient: 'from-amber-500/10 to-amber-600/5' },
-  info: { icon: Search, title: 'Information', color: 'text-blue-500', bgGradient: 'from-blue-500/10 to-blue-600/5' },
-  approach: { icon: Route, title: 'Approach', color: 'text-violet-500', bgGradient: 'from-violet-500/10 to-violet-600/5' },
-  findings: { icon: Lightbulb, title: 'Findings', color: 'text-emerald-500', bgGradient: 'from-emerald-500/10 to-emerald-600/5' },
-  reasoning: { icon: Brain, title: 'Reasoning', color: 'text-violet-500', bgGradient: 'from-violet-500/10 to-violet-600/5' },
+  requirements: { icon: FileCode, title: 'Requirements', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  considerations: { icon: AlertTriangle, title: 'Considerations', color: 'text-secondary', bgGradient: 'from-secondary/15 to-secondary/5' },
+  approaches: { icon: Lightbulb, title: 'Approaches', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  questions: { icon: Search, title: 'Questions', color: 'text-secondary', bgGradient: 'from-secondary/15 to-secondary/5' },
+  understanding: { icon: Target, title: 'Understanding', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  breakdown: { icon: FileCode, title: 'Breakdown', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  dependencies: { icon: Cpu, title: 'Dependencies', color: 'text-muted-foreground', bgGradient: 'from-muted/30 to-muted/10' },
+  challenges: { icon: AlertTriangle, title: 'Challenges', color: 'text-secondary', bgGradient: 'from-secondary/15 to-secondary/5' },
+  architecture: { icon: Cpu, title: 'Architecture', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  components: { icon: FileCode, title: 'Components', color: 'text-emerald-500', bgGradient: 'from-emerald-500/15 to-emerald-500/5' },
+  edgecases: { icon: AlertTriangle, title: 'Edge Cases', color: 'text-rose-500', bgGradient: 'from-rose-500/15 to-rose-500/5' },
+  analysis: { icon: Search, title: 'Analysis', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  hypothesis: { icon: Lightbulb, title: 'Hypothesis', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  investigation: { icon: Search, title: 'Investigation', color: 'text-secondary', bgGradient: 'from-secondary/15 to-secondary/5' },
+  solution: { icon: CheckCircle, title: 'Solution', color: 'text-emerald-500', bgGradient: 'from-emerald-500/15 to-emerald-500/5' },
+  overview: { icon: Target, title: 'Overview', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  correctness: { icon: CheckCircle, title: 'Correctness', color: 'text-emerald-500', bgGradient: 'from-emerald-500/15 to-emerald-500/5' },
+  bestpractices: { icon: Cpu, title: 'Best Practices', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  improvements: { icon: Lightbulb, title: 'Improvements', color: 'text-secondary', bgGradient: 'from-secondary/15 to-secondary/5' },
+  info: { icon: Search, title: 'Information', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  approach: { icon: Route, title: 'Approach', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
+  findings: { icon: Lightbulb, title: 'Findings', color: 'text-emerald-500', bgGradient: 'from-emerald-500/15 to-emerald-500/5' },
+  reasoning: { icon: Brain, title: 'Reasoning', color: 'text-primary', bgGradient: 'from-primary/15 to-primary/5' },
 };
 
 function getThinkingConfig(type: string): { icon: typeof Lightbulb; title: string; color: string; bgGradient: string } {
@@ -85,11 +85,11 @@ export function ThinkingBlock({ content, thinkingType, isStreaming = false, isCo
       animate={{ opacity: 1, y: 0, scale: 1 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
       className={cn(
-        'rounded-xl overflow-hidden',
+        'overflow-hidden cyber-chamfer-sm',
         'bg-gradient-to-br backdrop-blur-sm',
         config.bgGradient,
-        'border border-white/10 dark:border-white/5',
-        'shadow-sm',
+        'border border-border/40',
+        'shadow-neon-sm',
         className
       )}
     >
@@ -98,7 +98,7 @@ export function ThinkingBlock({ content, thinkingType, isStreaming = false, isCo
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
           'w-full flex items-center gap-2.5 px-3 py-2.5 text-left',
-          'hover:bg-white/5 dark:hover:bg-white/[0.02] transition-all duration-200',
+          'hover:bg-white/5 transition-all duration-200',
           'group'
         )}
       >
@@ -106,18 +106,18 @@ export function ThinkingBlock({ content, thinkingType, isStreaming = false, isCo
           <Icon className={cn('w-4 h-4', config.color, 'transition-transform group-hover:scale-110')} />
           {isStreaming && (
             <span className="absolute -top-0.5 -right-0.5 w-2 h-2">
-              <span className="absolute inset-0 rounded-full bg-primary animate-ping opacity-75" />
-              <span className="absolute inset-0 rounded-full bg-primary" />
+              <span className="absolute inset-0 bg-primary animate-ping opacity-75" />
+              <span className="absolute inset-0 bg-primary" />
             </span>
           )}
         </div>
-        <span className={cn('text-xs font-medium flex-1 tracking-wide', config.color)}>
+        <span className={cn('text-xs font-mono font-medium flex-1 tracking-wider uppercase', config.color)}>
           {config.title}
           {isStreaming && (
             <span className="ml-1.5 inline-flex gap-0.5">
-              <span className="w-1 h-1 rounded-full bg-current animate-bounce" />
-              <span className="w-1 h-1 rounded-full bg-current animate-bounce [animation-delay:0.1s]" />
-              <span className="w-1 h-1 rounded-full bg-current animate-bounce [animation-delay:0.2s]" />
+              <span className="w-1 h-1 bg-current animate-bounce" />
+              <span className="w-1 h-1 bg-current animate-bounce [animation-delay:0.1s]" />
+              <span className="w-1 h-1 bg-current animate-bounce [animation-delay:0.2s]" />
             </span>
           )}
         </span>
@@ -142,8 +142,8 @@ export function ThinkingBlock({ content, thinkingType, isStreaming = false, isCo
             transition={{ duration: 0.2, ease: 'easeInOut' }}
             className="overflow-hidden"
           >
-            <div className="px-3 py-2.5 border-t border-white/5 dark:border-white/[0.02]">
-              <div className="text-xs text-muted-foreground/80 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto scrollbar-thin">
+            <div className="px-3 py-2.5 border-t border-border/40">
+              <div className="text-xs font-mono text-muted-foreground/80 whitespace-pre-wrap leading-relaxed max-h-48 overflow-y-auto scrollbar-thin">
                 {content}
               </div>
             </div>

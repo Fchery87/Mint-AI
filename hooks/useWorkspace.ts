@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { toast } from "sonner";
+import * as Sentry from "@sentry/nextjs";
 import type { WorkspaceState, PendingChange } from "@/types/workspace";
 import type { ProjectOutput } from "@/lib/project-types";
 import {
@@ -20,6 +21,7 @@ import {
   saveWorkspace,
 } from "@/lib/workspace-storage";
 import { detectLanguage } from "@/lib/language-detection";
+import { validatePath, getPathValidationErrorMessage } from "@/lib/path-validation";
 
 export interface UseWorkspaceReturn {
   workspace: WorkspaceState | null;
@@ -96,7 +98,18 @@ export function useWorkspace(): UseWorkspaceReturn {
   const displayReadOnly = !workspace;
 
   const createFile = useCallback((path: string, content: string) => {
+    const validation = validatePath(path);
+    if (!validation.valid) {
+      toast.error(getPathValidationErrorMessage(path, validation));
+      return;
+    }
     const language = detectLanguage(path);
+    Sentry.addBreadcrumb({
+      category: 'workspace',
+      message: 'User created file',
+      level: 'info',
+      data: { path, language, contentLength: content.length }
+    });
     setWorkspace((prev) => {
       if (!prev) {
         return workspaceFromSingleFile(content, language, path);
@@ -112,6 +125,17 @@ export function useWorkspace(): UseWorkspaceReturn {
   }, []);
 
   const updateFile = useCallback((path: string, content: string) => {
+    const validation = validatePath(path);
+    if (!validation.valid) {
+      toast.error(getPathValidationErrorMessage(path, validation));
+      return;
+    }
+    Sentry.addBreadcrumb({
+      category: 'workspace',
+      message: 'User updated file',
+      level: 'info',
+      data: { path, contentLength: content.length }
+    });
     setWorkspace((prev) => {
       if (!prev) return prev;
       return {
@@ -122,7 +146,18 @@ export function useWorkspace(): UseWorkspaceReturn {
     });
   }, []);
 
-  const deleteFile = useCallback((path: string) => {
+    const deleteFile = useCallback((path: string) => {
+    const validation = validatePath(path);
+    if (!validation.valid) {
+      toast.error(getPathValidationErrorMessage(path, validation));
+      return;
+    }
+    Sentry.addBreadcrumb({
+      category: 'workspace',
+      message: 'User deleted file',
+      level: 'info',
+      data: { path }
+    });
     setWorkspace((prev) => {
       if (!prev) return prev;
       const files = { ...prev.files };
@@ -141,6 +176,22 @@ export function useWorkspace(): UseWorkspaceReturn {
   }, []);
 
   const renameFile = useCallback((oldPath: string, newPath: string) => {
+    const oldValidation = validatePath(oldPath);
+    if (!oldValidation.valid) {
+      toast.error(getPathValidationErrorMessage(oldPath, oldValidation));
+      return;
+    }
+    const newValidation = validatePath(newPath);
+    if (!newValidation.valid) {
+      toast.error(getPathValidationErrorMessage(newPath, newValidation));
+      return;
+    }
+    Sentry.addBreadcrumb({
+      category: 'workspace',
+      message: 'User renamed file',
+      level: 'info',
+      data: { oldPath, newPath }
+    });
     setWorkspace((prev) => {
       if (!prev) return prev;
       const files = { ...prev.files };
@@ -169,6 +220,12 @@ export function useWorkspace(): UseWorkspaceReturn {
   }, []);
 
   const handleCreateCheckpoint = useCallback((label: string) => {
+    Sentry.addBreadcrumb({
+      category: 'workspace',
+      message: 'User created checkpoint',
+      level: 'info',
+      data: { label }
+    });
     setWorkspace((prev) => {
       if (!prev) return prev;
       const cp = createCheckpoint(prev, label);
@@ -182,6 +239,12 @@ export function useWorkspace(): UseWorkspaceReturn {
   }, []);
 
   const restoreCheckpoint = useCallback((checkpointId: string) => {
+    Sentry.addBreadcrumb({
+      category: 'workspace',
+      message: 'User restored checkpoint',
+      level: 'info',
+      data: { checkpointId }
+    });
     setWorkspace((prev) => {
       if (!prev) return prev;
       const cp = prev.checkpoints.find((c) => c.id === checkpointId);
@@ -229,6 +292,11 @@ export function useWorkspace(): UseWorkspaceReturn {
   }, []);
 
   const acceptPendingChange = useCallback((path: string) => {
+    const validation = validatePath(path);
+    if (!validation.valid) {
+      toast.error(getPathValidationErrorMessage(path, validation));
+      return;
+    }
     const change = pendingChanges[path];
     if (!change) return;
 
@@ -262,6 +330,15 @@ export function useWorkspace(): UseWorkspaceReturn {
 
   const acceptAllPendingChanges = useCallback(() => {
     if (Object.keys(pendingChanges).length === 0) return;
+
+    // Validate all paths before accepting
+    for (const path of Object.keys(pendingChanges)) {
+      const validation = validatePath(path);
+      if (!validation.valid) {
+        toast.error(getPathValidationErrorMessage(path, validation));
+        return;
+      }
+    }
 
     setWorkspace((prev) => {
       const newFiles: Record<string, string> = {};
@@ -300,24 +377,23 @@ export function useWorkspace(): UseWorkspaceReturn {
   }, []);
 
   const updateWorkspaceFromOutput = useCallback((output: ProjectOutput, mode?: "plan" | "build") => {
-    if (mode === "build") {
-      setWorkspace((prev) => {
-        const next = workspaceFromProjectOutput(output);
+    // Update workspace in both plan and build modes
+    setWorkspace((prev) => {
+      const next = workspaceFromProjectOutput(output);
 
-        if (prev) {
-          return {
-            ...prev,
-            files: { ...prev.files, ...next.files },
-            baseFiles: prev.baseFiles || next.baseFiles,
-            projectName: next.projectName || prev.projectName,
-            checkpoints: prev.checkpoints,
-            updatedAt: Date.now(),
-          };
-        }
+      if (prev) {
+        return {
+          ...prev,
+          files: { ...prev.files, ...next.files },
+          baseFiles: prev.baseFiles || next.baseFiles,
+          projectName: next.projectName || prev.projectName,
+          checkpoints: prev.checkpoints,
+          updatedAt: Date.now(),
+        };
+      }
 
-        return next;
-      });
-    }
+      return next;
+    });
   }, []);
 
   return {

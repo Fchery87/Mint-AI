@@ -1,113 +1,130 @@
+/**
+ * Error Boundary Component
+ *
+ * Catches JavaScript errors anywhere in the child component tree,
+ * logs those errors, and displays a fallback UI instead of crashing.
+ */
+
 "use client";
 
-import { Component, ReactNode, useState } from "react";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { Component, ReactNode } from "react";
 import * as Sentry from "@sentry/nextjs";
+import { ErrorFallback } from "./ErrorFallback";
+import { setSentryContext, type SentryAppState } from "@/lib/sentry-context";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
+  fallback?: ReactNode;
+  onError?: (error: Error, errorInfo: React.ErrorInfo) => void;
+  onReset?: () => void;
+  /**
+   * Function to get current application state for Sentry context enrichment.
+   * Should be provided by a parent component that has access to app state.
+   */
+  getAppState?: () => Partial<SentryAppState>;
 }
 
-interface ErrorInfo {
-  componentStack?: string;
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error: Error | null;
 }
 
-export function ErrorBoundary({ children }: ErrorBoundaryProps) {
-  const [hasError, setHasError] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
+/**
+ * Error Boundary class component
+ * 
+ * Usage:
+ * ```tsx
+ * <ErrorBoundary>
+ *   <MyComponent />
+ * </ErrorBoundary>
+ * ```
+ */
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
 
-  const handleReset = () => {
-    setHasError(false);
-    setError(null);
-  };
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    // Update state so the next render will show the fallback UI
+    return { hasError: true, error };
+  }
 
-  const handleReload = () => {
-    window.location.reload();
-  };
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    // Log error details
+    console.error("ErrorBoundary caught an error:", error);
+    console.error("Component stack:", errorInfo.componentStack);
 
-  const handleCatch = (err: Error, errorInfo: ErrorInfo) => {
-    setHasError(true);
-    setError(err);
+    // Enrich Sentry context with application state if available
+    if (this.props.getAppState) {
+      try {
+        const appState = this.props.getAppState();
+        setSentryContext(appState as SentryAppState);
+      } catch (e) {
+        console.warn("Failed to get app state for Sentry context:", e);
+      }
+    }
 
-    console.error("Error caught by boundary:", err, errorInfo);
-
-    Sentry.captureException(err, {
+    // Capture error with Sentry, including component stack
+    Sentry.captureException(error, {
       contexts: {
         react: {
           componentStack: errorInfo.componentStack,
         },
       },
     });
+
+    // Call optional onError handler
+    this.props.onError?.(error, errorInfo);
+  }
+
+  handleReset = () => {
+    // Reset error state
+    this.setState({ hasError: false, error: null });
+    
+    // Call optional onReset handler
+    this.props.onReset?.();
   };
 
-  if (hasError) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-slate-800 rounded-lg border border-slate-700 p-8 text-center">
-          <div className="flex justify-center mb-4">
-            <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center">
-              <AlertTriangle className="text-red-500" size={32} />
-            </div>
-          </div>
-
-          <h1 className="text-2xl font-bold text-white mb-2">
-            Something went wrong
-          </h1>
-
-          <p className="text-slate-400 mb-6">
-            An unexpected error occurred. Don&apos;t worry, your work is safe.
-          </p>
-
-          {error && (
-            <details className="mb-6 text-left">
-              <summary className="text-sm text-slate-500 cursor-pointer hover:text-slate-400 mb-2">
-                Error details
-              </summary>
-              <div className="bg-slate-950 rounded p-3 text-xs text-red-400 font-mono overflow-auto max-h-32">
-                {error.message ?? 'Unknown error'}
-              </div>
-            </details>
-          )}
-
-          <div className="flex gap-3 justify-center">
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-2 px-4 py-2 bg-mint-500 hover:bg-mint-600 text-white rounded-md transition-colors"
-            >
-              <RefreshCw size={16} />
-              Try Again
-            </button>
-
-            <button
-              onClick={handleReload}
-              className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-md transition-colors"
-            >
-              Reload Page
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <ErrorBoundaryInner onError={handleCatch}>
-      {children}
-    </ErrorBoundaryInner>
-  );
-}
-
-interface ErrorBoundaryInnerProps {
-  children: ReactNode;
-  onError: (error: Error, errorInfo: ErrorInfo) => void;
-}
-
-class ErrorBoundaryInner extends Component<ErrorBoundaryInnerProps> {
-  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    this.props.onError(error, { componentStack: errorInfo.componentStack ?? undefined });
-  }
-
   render() {
+    if (this.state.hasError && this.state.error) {
+      // Custom fallback if provided
+      if (this.props.fallback) {
+        return this.props.fallback;
+      }
+
+      // Default fallback with ErrorFallback component
+      return (
+        <ErrorFallback
+          error={this.state.error}
+          resetErrorBoundary={this.handleReset}
+        />
+      );
+    }
+
     return this.props.children;
   }
 }
+
+/**
+ * Higher-order component to wrap components with error boundary
+ * 
+ * Usage:
+ * ```tsx
+ * const SafeComponent = withErrorBoundary(MyComponent);
+ * ```
+ */
+export function withErrorBoundary<P extends object>(
+  Component: React.ComponentType<P>,
+  errorBoundaryProps?: Omit<ErrorBoundaryProps, "children">
+) {
+  return function WithErrorBoundary(props: P) {
+    return (
+      <ErrorBoundary {...errorBoundaryProps}>
+        <Component {...props} />
+      </ErrorBoundary>
+    );
+  };
+}
+
+export default ErrorBoundary;

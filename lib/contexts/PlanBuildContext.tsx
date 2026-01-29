@@ -90,7 +90,7 @@ function planBuildReducer(
     }
 
     case "ANSWER_QUESTION": {
-      if (!state.currentPlan) return state;
+      if (!state.currentPlan?.clarifyingQuestions) return state;
       const questions = state.currentPlan.clarifyingQuestions.map((q) =>
         q.id === action.questionId ? { ...q, answer: action.answer } : q
       );
@@ -306,9 +306,9 @@ export function PlanBuildProvider({ children }: { children: ReactNode }) {
     // Plan must be in READY status to be approved
     if (state.currentPlan.status !== PlanStatus.READY) return false;
     if (state.currentPlan.steps.length === 0) return false;
-    const unansweredRequired = state.currentPlan.clarifyingQuestions.filter(
+    const unansweredRequired = state.currentPlan.clarifyingQuestions?.filter(
       (q) => q.required && !q.answer
-    );
+    ) || [];
     return unansweredRequired.length === 0;
   }, [state.currentPlan]);
 
@@ -375,7 +375,7 @@ export function PlanBuildProvider({ children }: { children: ReactNode }) {
   }, [state.mode, state.currentPlan]);
 
   const hasUnansweredQuestions = useMemo(() => {
-    if (!state.currentPlan) return false;
+    if (!state.currentPlan?.clarifyingQuestions) return false;
     return state.currentPlan.clarifyingQuestions.some(
       (q) => q.required && !q.answer
     );

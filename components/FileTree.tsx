@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import { ChevronRight, ChevronDown, File, Folder, FolderOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FileTreeNode } from "@/lib/project-types";
@@ -11,7 +11,7 @@ interface FileTreeProps {
   onSelectFile: (path: string) => void;
 }
 
-export default function FileTree({ nodes, selectedPath, onSelectFile }: FileTreeProps) {
+function FileTree({ nodes, selectedPath, onSelectFile }: FileTreeProps) {
   return (
     <div className="text-sm font-mono">
       {nodes.map((node) => (
@@ -26,6 +26,21 @@ export default function FileTree({ nodes, selectedPath, onSelectFile }: FileTree
     </div>
   );
 }
+
+function areEqual(prevProps: FileTreeProps, nextProps: FileTreeProps): boolean {
+  if (prevProps.selectedPath !== nextProps.selectedPath) return false;
+  if (prevProps.nodes.length !== nextProps.nodes.length) return false;
+  
+  // Shallow comparison of nodes array references
+  for (let i = 0; i < prevProps.nodes.length; i++) {
+    if (prevProps.nodes[i] !== nextProps.nodes[i]) return false;
+  }
+  
+  // onSelectFile is a stable callback from parent
+  return true;
+}
+
+export default memo(FileTree, areEqual);
 
 interface FileTreeNodeComponentProps {
   node: FileTreeNode;

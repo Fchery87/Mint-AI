@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ConvexClientProvider } from "@/components/ConvexClientProvider";
 import { PlanBuildProvider } from "@/lib/contexts/PlanBuildContext";
+import { SentryErrorBoundaryWrapper } from "@/components/SentryErrorBoundaryWrapper";
 
 // 🌃 Cyberpunk Typography System
 const orbitron = Orbitron({
@@ -58,7 +59,9 @@ export default function RootLayout({
         >
           <ConvexClientProvider>
             <PlanBuildProvider>
-              <ErrorBoundary>{children}</ErrorBoundary>
+              <SentryErrorBoundaryWrapper>
+                {children}
+              </SentryErrorBoundaryWrapper>
             </PlanBuildProvider>
           </ConvexClientProvider>
           <Toaster />

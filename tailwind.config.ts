@@ -17,43 +17,52 @@ const config: Config = {
     },
     extend: {
       colors: {
-        border: 'hsl(var(--border))',
-        input: 'hsl(var(--input))',
-        ring: 'hsl(var(--ring))',
-        background: 'hsl(var(--background))',
-        foreground: 'hsl(var(--foreground))',
-        primary: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))',
-        },
-        secondary: {
-          DEFAULT: 'hsl(var(--accent-secondary))',
-          foreground: 'hsl(var(--foreground))',
-        },
-        tertiary: {
-          DEFAULT: 'hsl(var(--accent-tertiary))',
-          foreground: 'hsl(var(--foreground))',
-        },
-        destructive: {
-          DEFAULT: 'hsl(var(--destructive))',
-          foreground: 'hsl(var(--destructive-foreground))',
-        },
-        muted: {
-          DEFAULT: 'hsl(var(--muted))',
-          foreground: 'hsl(var(--muted-foreground))',
-        },
-        accent: {
-          DEFAULT: 'hsl(var(--accent))',
-          foreground: 'hsl(var(--accent-foreground))',
+        // Core theme colors using CSS variables (RGB format)
+        background: 'rgb(var(--background))',
+        foreground: 'rgb(var(--foreground))',
+        card: {
+          DEFAULT: 'rgb(var(--card))',
+          foreground: 'rgb(var(--card-foreground))',
         },
         popover: {
-          DEFAULT: 'hsl(var(--popover))',
-          foreground: 'hsl(var(--popover-foreground))',
+          DEFAULT: 'rgb(var(--popover))',
+          foreground: 'rgb(var(--popover-foreground))',
         },
-        card: {
-          DEFAULT: 'hsl(var(--card))',
-          foreground: 'hsl(var(--card-foreground))',
+        muted: {
+          DEFAULT: 'rgb(var(--muted))',
+          foreground: 'rgb(var(--muted-foreground))',
         },
+        accent: {
+          DEFAULT: 'rgb(var(--accent))',
+          foreground: 'rgb(var(--accent-foreground))',
+          secondary: 'rgb(var(--accent-secondary))',
+          tertiary: 'rgb(var(--accent-tertiary))',
+        },
+        border: 'rgb(var(--border))',
+        input: 'rgb(var(--input))',
+        ring: 'rgb(var(--ring))',
+        destructive: {
+          DEFAULT: 'rgb(var(--destructive))',
+          foreground: 'rgb(var(--destructive-foreground))',
+        },
+        // Mapped aliases for shadcn/ui compatibility
+        primary: {
+          DEFAULT: 'rgb(var(--accent))',
+          foreground: 'rgb(var(--accent-foreground))',
+        },
+        secondary: {
+          DEFAULT: 'rgb(var(--accent-secondary))',
+          foreground: 'rgb(var(--foreground))',
+        },
+        tertiary: {
+          DEFAULT: 'rgb(var(--accent-tertiary))',
+          foreground: 'rgb(var(--foreground))',
+        },
+        // Custom cyberpunk colors
+        'void-black': '#0a0a0f',
+        'neon-green': '#00ff88',
+        'neon-magenta': '#ff00ff',
+        'neon-cyan': '#00d4ff',
       },
       borderRadius: {
         none: 'var(--radius-none)',
@@ -62,12 +71,12 @@ const config: Config = {
       },
       fontFamily: {
         // Cyberpunk Typography System
-        display: ['var(--font-display)', 'monospace'],
-        sans: ['var(--font-sans)', 'monospace'],
-        mono: ['var(--font-mono)', 'monospace'],
+        display: ['var(--font-display)', 'Orbitron', 'sans-serif'],
+        sans: ['var(--font-sans)', 'Share Tech Mono', 'monospace'],
+        mono: ['var(--font-mono)', 'JetBrains Mono', 'monospace'],
       },
       boxShadow: {
-        'neon': 'var(--shadow-neon)',
+        neon: 'var(--shadow-neon)',
         'neon-sm': 'var(--shadow-neon-sm)',
         'neon-lg': 'var(--shadow-neon-lg)',
         'neon-secondary': 'var(--shadow-neon-secondary)',
@@ -83,40 +92,45 @@ const config: Config = {
         glitch: 'steps(4)',
       },
       keyframes: {
-        'blink': {
+        blink: {
+          '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0' },
         },
-        'glitch': {
-          '0%, 100%': { 
+        glitch: {
+          '0%, 100%': {
             transform: 'translate(0)',
             clipPath: 'polygon(0 2%, 100% 2%, 100% 5%, 0 5%)',
           },
-          '20%': { 
+          '20%': {
             transform: 'translate(-2px, 2px)',
             clipPath: 'polygon(0 15%, 100% 15%, 100% 15%, 0 15%)',
           },
-          '40%': { 
+          '40%': {
             transform: 'translate(2px, -2px)',
             clipPath: 'polygon(0 10%, 100% 10%, 100% 20%, 0 20%)',
           },
-          '60%': { 
+          '60%': {
             transform: 'translate(-1px, -1px)',
             clipPath: 'polygon(0 1%, 100% 1%, 100% 2%, 0 2%)',
           },
-          '80%': { 
+          '80%': {
             transform: 'translate(1px, 1px)',
             clipPath: 'polygon(0 33%, 100% 33%, 100% 33%, 0 33%)',
           },
         },
-        'rgbShift': {
-          '0%, 100%': { 
+        scanline: {
+          '0%': { transform: 'translateY(-100%)' },
+          '100%': { transform: 'translateY(100vh)' },
+        },
+        'rgb-shift': {
+          '0%, 100%': {
             textShadow: '-2px 0 #ff00ff, 2px 0 #00d4ff',
           },
-          '50%': { 
+          '50%': {
             textShadow: '2px 0 #ff00ff, -2px 0 #00d4ff',
           },
         },
-        'flicker': {
+        flicker: {
           '0%, 100%': { opacity: '1' },
           '41%': { opacity: '1' },
           '42%': { opacity: '0.8' },
@@ -124,12 +138,32 @@ const config: Config = {
           '45%': { opacity: '0.3' },
           '46%': { opacity: '1' },
         },
+        'pulse-glow': {
+          '0%, 100%': {
+            boxShadow: '0 0 5px rgba(0, 255, 136, 0.8), 0 0 10px rgba(0, 255, 136, 0.4)',
+          },
+          '50%': {
+            boxShadow: '0 0 10px rgba(0, 255, 136, 1), 0 0 20px rgba(0, 255, 136, 0.6), 0 0 30px rgba(0, 255, 136, 0.3)',
+          },
+        },
+        'slide-up': {
+          '0%': { transform: 'translateY(100%)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        'slide-down': {
+          '0%': { transform: 'translateY(-100%)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
       },
       animation: {
-        'blink': 'blink 1s step-end infinite',
-        'glitch': 'glitch 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite',
-        'rgb-shift': 'rgbShift 3s ease-in-out infinite',
-        'flicker': 'flicker 2s linear infinite',
+        blink: 'blink 1s step-end infinite',
+        glitch: 'glitch 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite',
+        scanline: 'scanline 8s linear infinite',
+        'rgb-shift': 'rgb-shift 3s ease-in-out infinite',
+        flicker: 'flicker 2s linear infinite',
+        'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
+        'slide-up': 'slide-up 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        'slide-down': 'slide-down 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
       },
     },
   },

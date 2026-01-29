@@ -1,8 +1,8 @@
 import { useRef, useState, memo, useCallback, useMemo } from "react";
-import { Cpu, Terminal, Sparkles } from "lucide-react";
+import dynamic from "next/dynamic";
+import { Cpu, Terminal, Sparkles, Loader2, Zap, ChevronDown, ChevronRight, ArrowLeft } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CyberButton } from "@/components/ui";
-import { SkillComposer } from "@/components/SkillComposer";
 import type { SkillChainItem } from "@/components/SkillComposer";
 import MessageItem, { type ChatMessage, type ThinkingItem } from "@/components/MessageItem";
 import { ThinkingBlock } from "@/components/ThinkingBlock";
@@ -29,6 +29,22 @@ import { SkillType } from "@/types/skill";
 import { PlanStatus } from "@/types/plan-build";
 import { cn } from "@/lib/utils";
 
+// Lazy load SkillComposer - heavy component with framer-motion
+const SkillComposer = dynamic(
+  () => import("@/components/SkillComposer").then((mod) => mod.SkillComposer),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex flex-col items-center justify-center h-full min-h-[300px] gap-4">
+        <div className="flex items-center gap-3 text-muted-foreground/60">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm font-mono uppercase tracking-wider">Loading Skill Composer...</span>
+        </div>
+      </div>
+    ),
+  }
+);
+
 // Re-export types for consumers
 export type { ChatMessage, ThinkingItem };
 
@@ -43,6 +59,9 @@ interface ChatPanelProps {
     stage: string;
     confidence?: number;
   } | null;
+  // Mode toggle props
+  mode?: "plan" | "build";
+  onModeChange?: (mode: "plan" | "build") => void;
   // Plan approval props
   planStatus?: PlanStatus;
   canStartBuild?: boolean;
@@ -63,6 +82,8 @@ function ChatPanelComponent({
   onSendMessage,
   messagesEndRef,
   activeSkill,
+  mode = "build",
+  onModeChange,
   planStatus,
   canStartBuild,
   hasUnansweredQuestions,
@@ -151,9 +172,10 @@ function ChatPanelComponent({
           </div>
           <button
             onClick={handleBackToChat}
-            className="px-4 py-1.5 text-xs font-bold uppercase tracking-wider font-mono cyber-chamfer-sm border border-border/40 hover:border-secondary hover:bg-secondary/10 hover:shadow-neon-secondary-sm transition-all duration-fast"
+            className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-bold uppercase tracking-wider font-mono cyber-chamfer-sm border border-border/40 hover:border-secondary hover:bg-secondary/10 hover:shadow-neon-secondary-sm transition-all duration-fast"
           >
-            ← Back to Chat
+            <ArrowLeft className="w-3 h-3" />
+            Back to Chat
           </button>
         </div>
         <div className="flex-1 overflow-y-auto p-4">
@@ -180,8 +202,13 @@ function ChatPanelComponent({
           onClick={toggleSkillComposer}
           className="flex items-center gap-2 px-4 py-1.5 text-xs font-bold uppercase tracking-wider font-mono cyber-chamfer-sm border border-border/40 hover:border-primary hover:bg-primary/10 hover:shadow-neon-sm transition-all duration-fast group"
         >
-          <span className="text-primary group-hover:text-primary transition-colors">⚡ SKILL_COMPOSER</span>
-          {showSkillComposer ? "▼" : "▶"}
+          <Zap className="w-3 h-3 text-primary group-hover:text-primary transition-colors" />
+          <span className="text-primary group-hover:text-primary transition-colors">SKILL_COMPOSER</span>
+          {showSkillComposer ? (
+            <ChevronDown className="w-3 h-3 text-primary" />
+          ) : (
+            <ChevronRight className="w-3 h-3 text-primary" />
+          )}
         </button>
       </div>
 
@@ -201,7 +228,7 @@ function ChatPanelComponent({
                   Describe the system you want to build and I'll generate the code.
                 </p>
               </div>
-              
+
               <div className="grid gap-2">
                 {[
                   { title: "Create a todo app", desc: "With tasks & completion" },
@@ -238,7 +265,7 @@ function ChatPanelComponent({
                   exit={{ opacity: 0, height: 0 }}
                   className="mb-4"
                 >
-                  <StreamingIndicator 
+                  <StreamingIndicator
                     skill={activeSkill}
                     status={`${activeSkill.type} // ${activeSkill.stage}`}
                   />
@@ -248,29 +275,6 @@ function ChatPanelComponent({
 
             {messageList}
 
-            {/* Streaming Indicator at bottom */}
-            <AnimatePresence>
-              {isLoading && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="mt-4"
-                >
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-                    <div className="flex gap-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:0.1s]" />
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-bounce [animation-delay:0.2s]" />
-                    </div>
-                    <span className="uppercase tracking-wider">
-                      {activeSkill ? `${activeSkill.stage}...` : "Processing..."}
-                    </span>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
-
             <div ref={messagesEndRef} />
           </>
         )}
@@ -278,6 +282,37 @@ function ChatPanelComponent({
 
       {/* Input - Cyberpunk */}
       <div className="p-4 border-t border-border/60 bg-muted/20 backdrop-blur-sm">
+        {/* Mode Toggle */}
+        <div className="flex items-center gap-2 mb-3">
+          <div className="flex items-center gap-1 p-1 bg-background/50 border border-border/40 cyber-chamfer-sm">
+            <button
+              onClick={() => onModeChange?.("plan")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider transition-all duration-fast cyber-chamfer-sm",
+                mode === "plan"
+                  ? "bg-primary text-primary-foreground shadow-neon-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              Plan
+            </button>
+            <button
+              onClick={() => onModeChange?.("build")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-mono font-bold uppercase tracking-wider transition-all duration-fast cyber-chamfer-sm",
+                mode === "build"
+                  ? "bg-secondary text-secondary-foreground shadow-neon-secondary-sm"
+                  : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+              )}
+            >
+              Build
+            </button>
+          </div>
+          <span className="text-[10px] text-muted-foreground font-mono uppercase tracking-wider">
+            {mode === "plan" ? "Planning mode - Create implementation plans" : "Build mode - Generate code directly"}
+          </span>
+        </div>
+
         <PromptInputProvider onSubmit={handleSubmit}>
           <PromptInput
             globalDrop
@@ -323,6 +358,7 @@ export default memo(ChatPanelComponent, (prevProps, nextProps) => {
     prevProps.isLoading === nextProps.isLoading &&
     prevProps.status === nextProps.status &&
     prevProps.activeSkill === nextProps.activeSkill &&
+    prevProps.mode === nextProps.mode &&
     prevProps.planStatus === nextProps.planStatus &&
     prevProps.canStartBuild === nextProps.canStartBuild &&
     prevProps.hasUnansweredQuestions === nextProps.hasUnansweredQuestions

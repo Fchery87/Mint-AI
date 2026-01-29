@@ -39,9 +39,9 @@ export function PlanReviewModal({
 
   if (!editedPlan) return null;
 
-  const hasUnansweredQuestions = editedPlan.clarifyingQuestions.some(
+  const hasUnansweredQuestions = editedPlan.clarifyingQuestions?.some(
     (q) => q.required && !q.answer
-  );
+  ) ?? false;
 
   const handleApprove = () => {
     onSave(editedPlan);

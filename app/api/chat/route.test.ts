@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 
 // Note: In a real environment, we'd import this from route.ts.
 // Since we're in a test environment, we'll re-implement or import if possible.

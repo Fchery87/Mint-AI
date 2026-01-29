@@ -122,18 +122,30 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
 
     // Handle resize
     const handleResize = () => {
-      fitAddon.fit();
-      // Notify PTY server of resize
-      if (activeSessionId) {
-        const cols = term.cols;
-        const rows = term.rows;
-        resizeTerminal(activeSessionId, cols, rows);
+      try {
+        if (fitAddonRef.current && xtermRef.current) {
+          fitAddonRef.current.fit();
+          // Notify PTY server of resize
+          if (activeSessionId) {
+            const cols = xtermRef.current.cols;
+            const rows = xtermRef.current.rows;
+            resizeTerminal(activeSessionId, cols, rows);
+          }
+        }
+      } catch (err) {
+        console.warn('Resize error:', err);
       }
     };
     window.addEventListener('resize', handleResize);
     
     // Initial fit after small delay
-    const fitTimeout = setTimeout(() => fitAddon.fit(), 100);
+    const fitTimeout = setTimeout(() => {
+      try {
+        fitAddonRef.current?.fit();
+      } catch (err) {
+        console.warn('Initial fit error:', err);
+      }
+    }, 100);
 
     return () => {
       window.removeEventListener('resize', handleResize);
@@ -148,26 +160,30 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
   useEffect(() => {
     if (!xtermRef.current) return;
     
-    xtermRef.current.options.fontSize = config.fontSize;
-    xtermRef.current.options.fontFamily = config.fontFamily;
-    xtermRef.current.options.scrollback = config.scrollback;
-    
-    if (localConfig.theme === 'light') {
-      xtermRef.current.options.theme = {
-        background: '#ffffff',
-        foreground: '#1a1a1a',
-        cursor: '#0066cc',
-      };
-    } else {
-      xtermRef.current.options.theme = {
-        background: '#0d1117',
-        foreground: '#e6edf3',
-        cursor: '#58a6ff',
-        cursorAccent: '#0d1117',
-      };
+    try {
+      xtermRef.current.options.fontSize = config.fontSize;
+      xtermRef.current.options.fontFamily = config.fontFamily;
+      xtermRef.current.options.scrollback = config.scrollback;
+      
+      if (localConfig.theme === 'light') {
+        xtermRef.current.options.theme = {
+          background: '#ffffff',
+          foreground: '#1a1a1a',
+          cursor: '#0066cc',
+        };
+      } else {
+        xtermRef.current.options.theme = {
+          background: '#0d1117',
+          foreground: '#e6edf3',
+          cursor: '#58a6ff',
+          cursorAccent: '#0d1117',
+        };
+      }
+      
+      fitAddonRef.current?.fit();
+    } catch (err) {
+      console.warn('Config update error:', err);
     }
-    
-    fitAddonRef.current?.fit();
   }, [config, localConfig.theme]);
 
   // Handle PTY output
@@ -545,14 +561,66 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
       )}
 
       {/* XTerm Container */}
-      <div 
-        ref={terminalRef}
-        className="flex-1 p-2 overflow-hidden"
-        style={{ 
-          fontSize: config.fontSize,
-          fontFamily: config.fontFamily
-        }}
-      />
+      <div className="flex-1 relative overflow-hidden">
+        {/* Disconnected State Overlay */}
+        {!ptyClient.connected && !ptyClient.connecting && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#0d1117]/95">
+            <WifiOff className="w-12 h-12 text-red-500 mb-4" />
+            <h3 className="text-lg font-semibold text-gray-300 mb-2">
+              Terminal Server Disconnected
+            </h3>
+            <p className="text-sm text-gray-500 text-center max-w-md mb-4">
+              The PTY server is not running. You can still use the terminal with built-in commands, 
+              or start the server with <code className="bg-[#30363d] px-1.5 py-0.5 rounded">bun run dev:pty</code>
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => connect()}
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-500 transition-colors flex items-center gap-2"
+              >
+                <Wifi className="w-4 h-4" />
+                Retry Connection
+              </button>
+              <button
+                onClick={() => {
+                  if (xtermRef.current) {
+                    xtermRef.current.writeln('\r\n\x1b[33mℹ Operating in fallback mode. Type "help" for available commands.\x1b[0m');
+                    xtermRef.current.write('\x1b[1;32m❯\x1b[0m ');
+                  }
+                }}
+                className="px-4 py-2 bg-[#30363d] text-gray-300 text-sm rounded hover:bg-[#484f58] transition-colors"
+              >
+                Use Fallback Mode
+              </button>
+            </div>
+            <div className="mt-6 text-xs text-gray-600">
+              <p>Built-in commands available: help, clear, echo, pwd, date, whoami, ls, cat, uname, hostname, env</p>
+            </div>
+          </div>
+        )}
+        
+        {/* Connecting State */}
+        {ptyClient.connecting && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#0d1117]/90">
+            <div className="animate-spin mb-4">
+              <svg className="w-8 h-8 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
+                <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+              </svg>
+            </div>
+            <p className="text-sm text-gray-400">Connecting to terminal server...</p>
+          </div>
+        )}
+        
+        <div 
+          ref={terminalRef}
+          className="h-full p-2"
+          style={{ 
+            fontSize: config.fontSize,
+            fontFamily: config.fontFamily
+          }}
+        />
+      </div>
 
       {/* Status Bar */}
       <div className="flex items-center justify-between px-3 py-1 bg-[#161b22] border-t border-[#30363d] text-xs text-gray-500">

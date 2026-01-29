@@ -18,7 +18,7 @@ import { createHash } from 'crypto';
 import { spawn } from 'child_process';
 import { stat } from 'fs';
 
-const PORT = process.env.PTY_PORT || 3001;
+const PORT = process.env.PTY_PORT ? parseInt(process.env.PTY_PORT, 10) : 3001;
 const PTY_HOST = process.env.PTY_HOST || 'localhost';
 
 // Session storage with cwd and command history
@@ -68,16 +68,16 @@ function getHomeDir(): string {
 // Get current working directory with validation
 async function getValidatedCwd(cwd: string): Promise<string> {
   try {
-    await new Promise<void>((resolve, reject) => {
+    const isValid = await new Promise<boolean>((resolve) => {
       stat(cwd, (err, stats) => {
         if (err || !stats.isDirectory()) {
-          resolve(getHomeDir());
+          resolve(false);
         } else {
-          resolve();
+          resolve(true);
         }
       });
     });
-    return cwd;
+    return isValid ? cwd : getHomeDir();
   } catch {
     return getHomeDir();
   }
@@ -228,7 +228,7 @@ function createSession(requestedId?: string, cwd?: string): PtySession {
   });
 
   // Handle PTY exit
-  pty.onExit(({ exitCode, signal }: { exitCode: number; signal: number }) => {
+  pty.onExit(({ exitCode, signal }: { exitCode: number; signal?: number }) => {
     const session = sessions.get(sessionId);
     if (session) {
       session.pty = null;

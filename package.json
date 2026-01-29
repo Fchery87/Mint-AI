@@ -10,12 +10,23 @@
     "start": "bun --bun next start",
     "lint": "bun run typecheck",
     "typecheck": "tsc --noEmit",
-    "convex:codegen": "bun x convex codegen"
+    "convex:codegen": "bun x convex codegen",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/bun": "latest",
     "@types/ioredis": "^5.0.0",
-    "ioredis": "^5.9.2"
+    "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.1.2",
+    "@vitest/coverage-v8": "^4.0.18",
+    "ioredis": "^5.9.2",
+    "jsdom": "^27.4.0",
+    "vitest": "^4.0.18"
   },
   "peerDependencies": {
     "typescript": "^5.9.3"

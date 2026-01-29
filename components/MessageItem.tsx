@@ -83,21 +83,21 @@ function ToolActivityBlock({ tool }: { tool: ToolItem }) {
   };
 
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 dark:bg-amber-500/5 rounded-lg border border-amber-500/20 text-xs">
-      <span className="text-amber-600 dark:text-amber-400">
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/10 border border-secondary/30 text-xs cyber-chamfer-sm">
+      <span className="text-secondary">
         {getToolIcon(tool.toolName)}
       </span>
-      <span className="font-medium text-amber-700 dark:text-amber-300">
+      <span className="font-mono font-medium text-secondary uppercase tracking-wider">
         {getToolLabel(tool.toolName)}
       </span>
       {tool.status === 'running' && (
-        <Loader2 className="w-3 h-3 animate-spin ml-auto text-amber-500" />
+        <Loader2 className="w-3 h-3 animate-spin ml-auto text-secondary" />
       )}
       {tool.status === 'complete' && (
         <CheckCircle className="w-3 h-3 ml-auto text-emerald-500" />
       )}
       {tool.message && (
-        <span className="text-muted-foreground truncate max-w-[150px]">
+        <span className="text-muted-foreground truncate max-w-[150px] font-mono">
           {tool.message}
         </span>
       )}
@@ -115,17 +115,17 @@ function ToolResultsBlock({ results }: { results: string }) {
   const isLong = lines.length > 5;
 
   return (
-    <div className="w-full max-w-[85%] bg-zinc-900/50 rounded-xl border border-zinc-500/10">
+    <div className="w-full max-w-[85%] bg-muted/30 border border-border/40 cyber-chamfer-sm">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-zinc-800/30 transition-colors rounded-t-xl"
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors"
       >
-        <div className="w-2 h-2 rounded-full bg-zinc-600" />
-        <span className="text-zinc-500 text-[11px] font-medium">Workspace Action Result</span>
+        <div className="w-2 h-2 bg-primary shadow-neon-sm" />
+        <span className="text-muted-foreground text-[11px] font-mono uppercase tracking-wider">Workspace Action Result</span>
         {isLong && (
           <ChevronDown
             className={cn(
-              'w-3 h-3 ml-auto text-zinc-500 transition-transform',
+              'w-3 h-3 ml-auto text-muted-foreground transition-transform',
               isExpanded && 'rotate-180'
             )}
           />
@@ -139,7 +139,7 @@ function ToolResultsBlock({ results }: { results: string }) {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <pre className="px-3 py-2 font-mono text-[11px] text-zinc-400 whitespace-pre-wrap border-t border-zinc-500/10">
+            <pre className="px-3 py-2 font-mono text-[11px] text-muted-foreground whitespace-pre-wrap border-t border-border/40">
               {results.trim()}
             </pre>
           </motion.div>
@@ -278,10 +278,10 @@ function MessageItemComponent({
           {activeSkill ? (
             <SkillThinkingIndicator skill={activeSkill} />
           ) : (
-            <div className="bg-muted px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce" />
-              <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce [animation-delay:0.1s]" />
-              <div className="w-1.5 h-1.5 rounded-full bg-foreground/40 animate-bounce [animation-delay:0.2s]" />
+            <div className="bg-muted px-4 py-3 cyber-chamfer-sm flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 bg-primary shadow-neon-sm animate-bounce" />
+              <div className="w-1.5 h-1.5 bg-primary shadow-neon-sm animate-bounce [animation-delay:0.1s]" />
+              <div className="w-1.5 h-1.5 bg-primary shadow-neon-sm animate-bounce [animation-delay:0.2s]" />
             </div>
           )}
         </div>

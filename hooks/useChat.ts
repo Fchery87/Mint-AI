@@ -7,6 +7,7 @@
 
 import { useState, useCallback, useRef } from "react";
 import { toast } from "sonner";
+import * as Sentry from "@sentry/nextjs";
 import type { ChatMessage, ChatRequest, ThinkingItem } from "@/types/chat";
 import type { SkillType } from "@/types/skill";
 import type { ProjectOutput } from "@/lib/project-types";
@@ -15,6 +16,7 @@ import { detectLanguage } from "@/lib/language-detection";
 import { checkCodeQuality, formatQualityReport } from "@/lib/code-quality-check";
 import { parsePlanResponse } from "@/lib/plan-parser";
 import type { ExecutionPlan } from "@/types/plan-build";
+import { withRetry, createFetchRetryPredicate } from "@/lib/retry";
 
 export interface UseChatReturn {
   messages: ChatMessage[];
@@ -89,6 +91,18 @@ export function useChat(): UseChatReturn {
   ) => {
     if (!message.trim()) return;
 
+    Sentry.addBreadcrumb({
+      category: 'chat',
+      message: 'User sent message',
+      level: 'info',
+      data: { 
+        messageLength: message.length,
+        mode: options.mode || 'plan',
+        hasPlan: !!options.currentPlan,
+        webSearch: options.webSearch 
+      }
+    });
+
     const {
       outputFormat: preferredFormat,
       mode = "plan",
@@ -117,6 +131,12 @@ export function useChat(): UseChatReturn {
 
     // Trigger checkpoint before generation in build mode
     if (mode === "build" && onCheckpoint) {
+      Sentry.addBreadcrumb({
+        category: 'action',
+        message: 'Creating checkpoint before build',
+        level: 'info',
+        data: { mode }
+      });
       onCheckpoint();
     }
 
@@ -135,16 +155,31 @@ export function useChat(): UseChatReturn {
           : {}),
       };
 
-      const response = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(chatRequest),
-      });
+      const response = await withRetry(
+        async () => {
+          const res = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(chatRequest),
+          });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || "Failed to generate component");
-      }
+          if (!res.ok) {
+            const error = await res.json();
+            throw new Error(error.error || `HTTP ${res.status}`);
+          }
+
+          return res;
+        },
+        {
+          maxRetries: 3,
+          initialDelayMs: 1000,
+          isRetryable: createFetchRetryPredicate(),
+          onRetry: (error, attempt) => {
+            toast.error(`Request failed (attempt ${attempt}/3). Retrying...`);
+            onTerminalLine?.(`⚠ Request failed: ${error.message}. Retrying (${attempt}/3)...`, "error");
+          },
+        }
+      );
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -279,6 +314,10 @@ export function useChat(): UseChatReturn {
                   const parsed = parseProjectOutput(accumulatedCode);
                   if (parsed.type === "project" && parsed.files.length > 0) {
                     setProjectOutput(parsed);
+                    // Update workspace in real-time during streaming
+                    if (onWorkspaceUpdate) {
+                      onWorkspaceUpdate(parsed);
+                    }
                   }
                 }
                 break;
@@ -293,8 +332,8 @@ export function useChat(): UseChatReturn {
                   const parsedOutput = parseProjectOutput(data.code);
                   setProjectOutput(parsedOutput);
 
-                  // Update workspace in build mode
-                  if (mode === "build" && onWorkspaceUpdate) {
+                  // Update workspace when code is generated (any mode)
+                  if (onWorkspaceUpdate) {
                     onWorkspaceUpdate(parsedOutput);
                   }
                 }
@@ -344,6 +383,15 @@ export function useChat(): UseChatReturn {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Failed to generate component";
+      Sentry.addBreadcrumb({
+        category: 'chat',
+        message: 'Chat request failed',
+        level: 'error',
+        data: { 
+          error: errorMessage,
+          messageLength: message.length 
+        }
+      });
       toast.error(errorMessage);
       onTerminalLine?.(`Error: ${errorMessage}`, "error");
       console.error("Error:", error);

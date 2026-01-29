@@ -82,7 +82,7 @@ function planBuildReducer(
     }
 
     case 'ANSWER_QUESTION': {
-      if (!state.currentPlan) return state;
+      if (!state.currentPlan?.clarifyingQuestions) return state;
       const questions = state.currentPlan.clarifyingQuestions.map((q) =>
         q.id === action.questionId ? { ...q, answer: action.answer } : q,
       );
@@ -263,9 +263,9 @@ export function usePlanBuild() {
     if (!state.currentPlan.userApproved) return false;
     if (state.currentPlan.steps.length === 0) return false;
     // Check if all required questions are answered
-    const unansweredRequired = state.currentPlan.clarifyingQuestions.filter(
+    const unansweredRequired = state.currentPlan.clarifyingQuestions?.filter(
       (q) => q.required && !q.answer,
-    );
+    ) || [];
     return unansweredRequired.length === 0;
   }, [state.currentPlan]);
 
