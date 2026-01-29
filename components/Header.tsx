@@ -39,7 +39,7 @@ export function Header({
       </div>
       <div className="flex items-center gap-3">
         {sessionCost && (
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-mint-500/10 border border-mint-500/20 rounded-full text-xs font-medium text-mint-600 dark:text-mint-400">
+          <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-accent/10 border border-accent/20 rounded-full text-xs font-medium text-accent">
             <Terminal size={12} />
             <span>{sessionCost.tokens} · {sessionCost.cost}</span>
           </div>
@@ -51,7 +51,7 @@ export function Header({
             onClick={() => setMode("plan")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
               mode === "plan"
-                ? "bg-purple-500/20 text-purple-600 dark:text-purple-400 shadow-sm"
+                ? "bg-accent/15 text-accent shadow-sm"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
             }`}
             title="Plan mode - Research and create a plan before building"
@@ -63,7 +63,7 @@ export function Header({
             onClick={() => setMode("build")}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
               mode === "build"
-                ? "bg-blue-500/20 text-blue-600 dark:text-blue-400 shadow-sm"
+                ? "bg-teal-500/15 text-teal-400 shadow-sm"
                 : "text-muted-foreground hover:text-foreground hover:bg-muted"
             }`}
             title="Build mode - Execute and write code"

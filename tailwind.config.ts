@@ -90,9 +90,11 @@ const config: Config = {
       },
       fontFamily: {
         // Clean sans-serif for UI
-        sans: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['DM Sans', 'var(--font-sans)', 'system-ui', 'sans-serif'],
+        // Display font for headings
+        display: ['Satoshi', 'DM Sans', 'system-ui', 'sans-serif'],
         // Monospace for code
-        mono: ['var(--font-mono)', 'JetBrains Mono', 'Fira Code', 'monospace'],
+        mono: ['JetBrains Mono', 'var(--font-mono)', 'Fira Code', 'monospace'],
       },
       fontSize: {
         '2xs': ['0.6875rem', { lineHeight: '1.4' }],

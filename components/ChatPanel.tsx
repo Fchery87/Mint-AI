@@ -167,13 +167,13 @@ function ChatPanelComponent({
       </div>
 
       {/* Mode Toggle */}
-      <div className="flex items-center gap-1 p-2 border-b border-border">
+      <div className="flex items-center gap-1 p-2 border-b border-border bg-card/50">
         <button
           onClick={() => onModeChange?.("plan")}
           className={cn(
             "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all",
             mode === "plan"
-              ? "bg-accent text-white shadow-sm"
+              ? "bg-accent text-accent-foreground shadow-sm"
               : "text-muted-foreground hover:text-foreground hover:bg-muted"
           )}
         >
@@ -185,7 +185,7 @@ function ChatPanelComponent({
           className={cn(
             "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all",
             mode === "build"
-              ? "bg-accent text-white shadow-sm"
+              ? "bg-teal-500 text-white shadow-sm"
               : "text-muted-foreground hover:text-foreground hover:bg-muted"
           )}
           title="Switch to Build mode - generate code directly"
