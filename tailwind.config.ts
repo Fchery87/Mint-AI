@@ -51,119 +51,88 @@ const config: Config = {
           foreground: 'rgb(var(--accent-foreground))',
         },
         secondary: {
-          DEFAULT: 'rgb(var(--accent-secondary))',
+          DEFAULT: 'rgb(var(--muted))',
           foreground: 'rgb(var(--foreground))',
         },
-        tertiary: {
-          DEFAULT: 'rgb(var(--accent-tertiary))',
+        // IDE-specific colors
+        sidebar: {
+          DEFAULT: 'rgb(var(--sidebar-bg))',
+          active: 'rgb(var(--sidebar-active))',
           foreground: 'rgb(var(--foreground))',
         },
-        // Custom cyberpunk colors
-        'void-black': '#0a0a0f',
-        'neon-green': '#00ff88',
-        'neon-magenta': '#ff00ff',
-        'neon-cyan': '#00d4ff',
+        editor: {
+          DEFAULT: 'rgb(var(--editor-bg))',
+        },
+        line: {
+          DEFAULT: 'rgb(var(--line-number))',
+          active: 'rgb(var(--line-number-active))',
+        },
+        // Semantic colors
+        success: {
+          DEFAULT: 'rgb(var(--success))',
+          foreground: '#ffffff',
+        },
+        warning: {
+          DEFAULT: 'rgb(var(--warning))',
+          foreground: '#ffffff',
+        },
+        info: {
+          DEFAULT: 'rgb(var(--info))',
+          foreground: '#ffffff',
+        },
       },
       borderRadius: {
         none: 'var(--radius-none)',
         sm: 'var(--radius-sm)',
-        DEFAULT: 'var(--radius-base)',
+        DEFAULT: 'var(--radius)',
+        md: 'var(--radius-md)',
+        lg: 'var(--radius-lg)',
       },
       fontFamily: {
-        // Cyberpunk Typography System
-        display: ['var(--font-display)', 'Orbitron', 'sans-serif'],
-        sans: ['var(--font-sans)', 'Share Tech Mono', 'monospace'],
-        mono: ['var(--font-mono)', 'JetBrains Mono', 'monospace'],
+        // Clean sans-serif for UI
+        sans: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],
+        // Monospace for code
+        mono: ['var(--font-mono)', 'JetBrains Mono', 'Fira Code', 'monospace'],
+      },
+      fontSize: {
+        '2xs': ['0.6875rem', { lineHeight: '1.4' }],
+        xs: ['0.75rem', { lineHeight: '1.5' }],
+        sm: ['0.875rem', { lineHeight: '1.5' }],
+        base: ['1rem', { lineHeight: '1.6' }],
+        lg: ['1.125rem', { lineHeight: '1.5' }],
+        xl: ['1.25rem', { lineHeight: '1.4' }],
+        '2xl': ['1.5rem', { lineHeight: '1.3' }],
+        '3xl': ['1.875rem', { lineHeight: '1.2' }],
       },
       boxShadow: {
-        neon: 'var(--shadow-neon)',
-        'neon-sm': 'var(--shadow-neon-sm)',
-        'neon-lg': 'var(--shadow-neon-lg)',
-        'neon-secondary': 'var(--shadow-neon-secondary)',
-        'neon-tertiary': 'var(--shadow-neon-tertiary)',
+        sm: 'var(--shadow-sm)',
+        DEFAULT: 'var(--shadow)',
+        md: 'var(--shadow-md)',
+        lg: 'var(--shadow-lg)',
       },
-      animationDuration: {
+      transitionDuration: {
         fast: '100ms',
         base: '150ms',
-        slow: '300ms',
-      },
-      transitionTimingFunction: {
-        digital: 'cubic-bezier(0.4, 0, 0.2, 1)',
-        glitch: 'steps(4)',
+        slow: '250ms',
       },
       keyframes: {
-        blink: {
+        'fade-in': {
+          from: { opacity: '0' },
+          to: { opacity: '1' },
+        },
+        'slide-in-left': {
+          from: { opacity: '0', transform: 'translateX(-10px)' },
+          to: { opacity: '1', transform: 'translateX(0)' },
+        },
+        'pulse-soft': {
           '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0' },
-        },
-        glitch: {
-          '0%, 100%': {
-            transform: 'translate(0)',
-            clipPath: 'polygon(0 2%, 100% 2%, 100% 5%, 0 5%)',
-          },
-          '20%': {
-            transform: 'translate(-2px, 2px)',
-            clipPath: 'polygon(0 15%, 100% 15%, 100% 15%, 0 15%)',
-          },
-          '40%': {
-            transform: 'translate(2px, -2px)',
-            clipPath: 'polygon(0 10%, 100% 10%, 100% 20%, 0 20%)',
-          },
-          '60%': {
-            transform: 'translate(-1px, -1px)',
-            clipPath: 'polygon(0 1%, 100% 1%, 100% 2%, 0 2%)',
-          },
-          '80%': {
-            transform: 'translate(1px, 1px)',
-            clipPath: 'polygon(0 33%, 100% 33%, 100% 33%, 0 33%)',
-          },
-        },
-        scanline: {
-          '0%': { transform: 'translateY(-100%)' },
-          '100%': { transform: 'translateY(100vh)' },
-        },
-        'rgb-shift': {
-          '0%, 100%': {
-            textShadow: '-2px 0 #ff00ff, 2px 0 #00d4ff',
-          },
-          '50%': {
-            textShadow: '2px 0 #ff00ff, -2px 0 #00d4ff',
-          },
-        },
-        flicker: {
-          '0%, 100%': { opacity: '1' },
-          '41%': { opacity: '1' },
-          '42%': { opacity: '0.8' },
-          '43%': { opacity: '1' },
-          '45%': { opacity: '0.3' },
-          '46%': { opacity: '1' },
-        },
-        'pulse-glow': {
-          '0%, 100%': {
-            boxShadow: '0 0 5px rgba(0, 255, 136, 0.8), 0 0 10px rgba(0, 255, 136, 0.4)',
-          },
-          '50%': {
-            boxShadow: '0 0 10px rgba(0, 255, 136, 1), 0 0 20px rgba(0, 255, 136, 0.6), 0 0 30px rgba(0, 255, 136, 0.3)',
-          },
-        },
-        'slide-up': {
-          '0%': { transform: 'translateY(100%)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
-        },
-        'slide-down': {
-          '0%': { transform: 'translateY(-100%)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
+          '50%': { opacity: '0.7' },
         },
       },
       animation: {
-        blink: 'blink 1s step-end infinite',
-        glitch: 'glitch 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) both infinite',
-        scanline: 'scanline 8s linear infinite',
-        'rgb-shift': 'rgb-shift 3s ease-in-out infinite',
-        flicker: 'flicker 2s linear infinite',
-        'pulse-glow': 'pulse-glow 2s ease-in-out infinite',
-        'slide-up': 'slide-up 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-        'slide-down': 'slide-down 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        'fade-in': 'fade-in 0.2s ease-out',
+        'slide-in-left': 'slide-in-left 0.2s ease-out',
+        'pulse-soft': 'pulse-soft 2s ease-in-out infinite',
       },
     },
   },

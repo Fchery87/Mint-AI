@@ -7,7 +7,7 @@
 
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 
 export interface PtyClientConfig {
   url?: string;
@@ -41,7 +41,10 @@ const DEFAULT_CONFIG: PtyClientConfig = {
 };
 
 export function usePtyClient(config: PtyClientConfig = {}) {
-  const mergedConfig = { ...DEFAULT_CONFIG, ...config };
+  // Memoize config to prevent object identity changes
+  const mergedConfig = useMemo(() => ({ ...DEFAULT_CONFIG, ...config }), 
+    [config.url, config.reconnectAttempts, config.reconnectDelay]);
+  
   const wsRef = useRef<WebSocket | null>(null);
   const handlersRef = useRef<Map<string, MessageHandler>>(new Map());
   const reconnectCountRef = useRef(0);
@@ -167,7 +170,7 @@ export function usePtyClient(config: PtyClientConfig = {}) {
     }
   }, []);
 
-  // Register message handler
+  // Register message handler - stable reference
   const on = useCallback((event: string, handler: MessageHandler) => {
     const id = `${event}-${Date.now()}-${Math.random().toString(36).substring(2)}`;
     handlersRef.current.set(id, handler);
@@ -209,15 +212,17 @@ export function usePtyClient(config: PtyClientConfig = {}) {
     send({ type: 'ping', timestamp: Date.now() });
   }, [send]);
 
-  // Cleanup on unmount
+  // Cleanup on unmount - only run once
   useEffect(() => {
     return () => {
       isMountedRef.current = false;
       disconnect();
     };
-  }, [disconnect]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  return {
+  // Return stable object reference
+  return useMemo(() => ({
     ...state,
     connect,
     disconnect,
@@ -230,7 +235,7 @@ export function usePtyClient(config: PtyClientConfig = {}) {
     closeSession,
     listSessions,
     ping,
-  };
+  }), [state, connect, disconnect, send, on, createSession, writeToSession, resizeSession, killSession, closeSession, listSessions, ping]);
 }
 
 // Helper hook for managing a single PTY session
@@ -239,7 +244,7 @@ export function usePtySession(initialSessionId?: string, cwd?: string) {
   const [sessionId, setSessionId] = useState<string | null>(initialSessionId || null);
   const [output, setOutput] = useState<string>('');
   const [exitCode, setExitCode] = useState<number | null>(null);
-  const [cwdState, setCwdState] = useState<string>(cwd || process.cwd());
+  const [cwdState, setCwdState] = useState<string>(cwd || '/home/mint-ai');
 
   // Register message handlers
   useEffect(() => {
@@ -280,14 +285,14 @@ export function usePtySession(initialSessionId?: string, cwd?: string) {
       unsubExit();
       unsubError();
     };
-  }, [client, client.connected]);
+  }, [client.connected]); // Only depend on connected state, not entire client
 
   // Create session on connect if not exists
   useEffect(() => {
     if (client.connected && !sessionId) {
       client.createSession(undefined, cwd);
     }
-  }, [client.connected, sessionId, cwd, client]);
+  }, [client.connected, sessionId, cwd]); // Remove client from deps
 
   // Write command
   const write = useCallback((data: string) => {

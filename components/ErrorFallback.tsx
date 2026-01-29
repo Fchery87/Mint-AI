@@ -1,7 +1,7 @@
 /**
  * Error Fallback Component
  *
- * User-friendly error display with cyberpunk aesthetic.
+ * User-friendly error display with clean modern styling.
  * Used by ErrorBoundary to display errors gracefully.
  */
 
@@ -40,15 +40,15 @@ export function ErrorFallback({
   // Get user-friendly error message
   const getUserMessage = () => {
     if (error.message.includes("network") || error.message.includes("fetch")) {
-      return "Connection lost. The system link has been severed.";
+      return "Connection lost. Please check your internet connection.";
     }
     if (error.message.includes("permission") || error.message.includes("access")) {
-      return "Access denied. Insufficient clearance level.";
+      return "Access denied. You don't have permission to perform this action.";
     }
     if (error.message.includes("timeout")) {
-      return "Operation timed out. The system is unresponsive.";
+      return "Operation timed out. The server is taking too long to respond.";
     }
-    return "System malfunction detected. An unexpected error occurred.";
+    return "An unexpected error occurred. Please try again.";
   };
 
   return (
@@ -58,7 +58,7 @@ export function ErrorFallback({
       transition={{ duration: 0.3 }}
       className={cn(
         "flex flex-col items-center justify-center min-h-[300px] p-6",
-        "bg-gradient-to-br from-background via-background to-muted/20",
+        "bg-background",
         className
       )}
     >
@@ -70,7 +70,7 @@ export function ErrorFallback({
         className="relative mb-6"
       >
         <div className="absolute inset-0 bg-rose-500/20 blur-xl rounded-full" />
-        <div className="relative w-20 h-20 rounded-2xl bg-gradient-to-br from-rose-500/20 to-rose-600/10 border border-rose-500/30 flex items-center justify-center shadow-neon-rose">
+        <div className="relative w-20 h-20 rounded-2xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center">
           <AlertTriangle className="w-10 h-10 text-rose-500" />
         </div>
       </motion.div>
@@ -80,9 +80,9 @@ export function ErrorFallback({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="text-xs font-mono uppercase tracking-[0.3em] text-rose-500/80 mb-2"
+        className="text-xs font-medium text-rose-500/80 mb-2 uppercase tracking-wide"
       >
-        Error // {error.name || "SYSTEM_FAILURE"}
+        {error.name || "Error"}
       </motion.div>
 
       {/* Title */}
@@ -90,9 +90,9 @@ export function ErrorFallback({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.25 }}
-        className="text-xl font-mono font-bold uppercase tracking-wider text-foreground mb-3"
+        className="text-xl font-semibold text-foreground mb-3"
       >
-        System Malfunction
+        Something went wrong
       </motion.h2>
 
       {/* User-friendly message */}
@@ -100,7 +100,7 @@ export function ErrorFallback({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="text-sm text-muted-foreground text-center max-w-md mb-6 font-mono"
+        className="text-sm text-muted-foreground text-center max-w-md mb-6"
       >
         {getUserMessage()}
       </motion.p>
@@ -113,11 +113,11 @@ export function ErrorFallback({
         className="w-full max-w-lg mb-6"
       >
         <details className="group">
-          <summary className="flex items-center gap-2 text-xs font-mono text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
+          <summary className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer hover:text-foreground transition-colors">
             <Terminal className="w-3.5 h-3.5" />
             <span>View Technical Details</span>
           </summary>
-          <div className="mt-2 p-3 rounded-lg bg-muted/50 border border-border/50 font-mono text-xs text-muted-foreground overflow-auto">
+          <div className="mt-2 p-3 rounded-lg bg-muted/50 border border-border font-mono text-xs text-muted-foreground overflow-auto">
             <p className="text-rose-500/80 mb-1">{error.message}</p>
             {error.stack && (
               <pre className="text-[10px] opacity-60 whitespace-pre-wrap">
@@ -140,14 +140,13 @@ export function ErrorFallback({
           onClick={resetErrorBoundary}
           className={cn(
             "group flex items-center gap-2 px-5 py-2.5 rounded-lg",
-            "bg-primary text-primary-foreground",
-            "border border-primary/20 shadow-neon-sm",
-            "hover:bg-primary/90 hover:shadow-neon transition-all duration-200",
-            "font-mono text-sm font-bold uppercase tracking-wider"
+            "bg-accent text-accent-foreground",
+            "hover:bg-accent/90 transition-all duration-200",
+            "text-sm font-medium"
           )}
         >
           <RefreshCw className="w-4 h-4 group-hover:rotate-180 transition-transform duration-500" />
-          Retry Operation
+          Try Again
         </button>
 
         {/* Report Button */}
@@ -156,9 +155,9 @@ export function ErrorFallback({
           className={cn(
             "group flex items-center gap-2 px-5 py-2.5 rounded-lg",
             "bg-muted text-muted-foreground",
-            "border border-border/50",
+            "border border-border",
             "hover:bg-muted/80 hover:text-foreground transition-all duration-200",
-            "font-mono text-sm font-bold uppercase tracking-wider"
+            "text-sm font-medium"
           )}
         >
           <Bug className="w-4 h-4" />
@@ -171,9 +170,9 @@ export function ErrorFallback({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.5 }}
-        className="mt-6 text-[10px] text-muted-foreground/60 font-mono uppercase tracking-wider"
+        className="mt-6 text-xs text-muted-foreground/60"
       >
-        If the problem persists, contact system administrator
+        If the problem persists, please contact support
       </motion.p>
     </motion.div>
   );

@@ -2,9 +2,9 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Obsidian Mint Card Component
+ * Card Component
  * 
- * Premium card system with multiple variants for different use cases.
+ * Clean card system with multiple variants for different use cases.
  * Provides elevation, borders, and flexible content layout.
  */
 
@@ -15,7 +15,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-lg border border-border bg-surface-elevated text-foreground shadow-md",
+      "rounded-lg border border-border bg-card text-card-foreground shadow-sm",
       className
     )}
     {...props}
@@ -41,7 +41,7 @@ const CardTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn("font-display font-semibold leading-none tracking-tight", className)}
+    className={cn("font-semibold leading-none tracking-tight text-lg", className)}
     {...props}
   />
 ));

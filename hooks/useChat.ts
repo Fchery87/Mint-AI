@@ -401,7 +401,8 @@ export function useChat(): UseChatReturn {
       setIsLoading(false);
       setTimeout(() => setInputStatus("ready"), 500);
     }
-  }, [chatId, messages.length]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatId]); // Only depend on chatId, not messages.length
 
   return {
     messages,

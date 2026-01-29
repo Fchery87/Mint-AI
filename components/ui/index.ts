@@ -1,44 +1,16 @@
 /**
- * 🌃 Cyberpunk UI Components - "High-Tech, Low-Life"
+ * UI Components
  * 
- * Aggressively futuristic components for the digital dystopia.
- * All components follow the Cyberpunk/Glitch design system.
+ * Clean, modern components following the Mint AI design system.
  * 
- * Visual Signatures:
- * - Chromatic aberration (RGB splitting)
- * - Scanline overlay
- * - Glitch effects
- * - Neon glow (multi-layer shadows)
- * - Chamfered corners (clip-path)
- * - Circuit/grid patterns
- * - Terminal aesthetic
+ * Design Principles:
+ * - Clarity first
+ * - Subtle sophistication
+ * - Excellent light & dark mode support
+ * - Consistent spacing and typography
  */
 
 // Core Components
-export { CyberButton, cyberButtonVariants } from "./cyber-button";
-export type { CyberButtonProps } from "./cyber-button";
-
-// Layout Components
-export {
-  CyberCard,
-  CyberCardHeader,
-  CyberCardFooter,
-  CyberCardTitle,
-  CyberCardDescription,
-  CyberCardContent,
-  cyberCardVariants,
-} from "./cyber-card";
-export type { CyberCardProps } from "./cyber-card";
-
-// Indicators
-export { CyberBadge, cyberBadgeVariants } from "./cyber-badge";
-export type { CyberBadgeProps } from "./cyber-badge";
-
-// Text Effects
-export { GlitchText, RGBShiftText, NeonText } from "./glitch-text";
-export type { GlitchTextProps, RGBShiftTextProps, NeonTextProps } from "./glitch-text";
-
-// Re-export existing components for convenience
 export { Button, buttonVariants } from "./button";
 export type { ButtonProps } from "./button";
 
@@ -69,3 +41,6 @@ export { Separator } from "./separator";
 export { Skeleton } from "./skeleton";
 export { Label } from "./label";
 export type { LabelProps } from "./label";
+
+export { Logo } from "./logo";
+export type { LogoProps } from "./logo";

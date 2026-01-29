@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useTerminalContext } from './TerminalProvider';
 import { cn } from '@/lib/utils';
+import { useTheme } from 'next-themes';
 
 interface TerminalTabsProps {
   onAddSession: () => void;
@@ -24,6 +25,8 @@ export function TerminalTabs({ onAddSession, onConfigClick }: TerminalTabsProps)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const { resolvedTheme } = useTheme();
+  const isLight = resolvedTheme === 'light';
 
   const handleRename = (sessionId: string) => {
     const session = sessions.find(s => s.id === sessionId);
@@ -51,27 +54,42 @@ export function TerminalTabs({ onAddSession, onConfigClick }: TerminalTabsProps)
   };
 
   return (
-    <div className="flex items-center bg-[#0d1117] border-b border-[#30363d]">
+    <div className={cn(
+      "flex items-center border-b",
+      isLight ? 'bg-[#fafafa] border-gray-200' : 'bg-[#0f172a] border-gray-700'
+    )}>
       {/* Tabs */}
-      <div className="flex-1 flex items-center overflow-x-auto scrollbar-thin scrollbar-thumb-[#30363d] scrollbar-track-transparent">
+      <div className="flex-1 flex items-center overflow-x-auto scrollbar-thin scrollbar-track-transparent">
         {sessions.map((session) => (
           <div
             key={session.id}
             className={cn(
-              'group flex items-center gap-1.5 px-3 py-2 min-w-0 border-r border-[#30363d] cursor-pointer transition-colors',
+              'group flex items-center gap-1.5 px-3 py-2 min-w-0 border-r cursor-pointer transition-colors',
+              isLight 
+                ? 'border-gray-200' 
+                : 'border-gray-700',
               activeSessionId === session.id
-                ? 'bg-[#161b22] border-t-2 border-t-blue-500'
-                : 'hover:bg-[#161b22]/50 border-t-2 border-t-transparent'
+                ? isLight 
+                  ? 'bg-white border-t-2 border-t-accent'
+                  : 'bg-[#1e293b] border-t-2 border-t-accent'
+                : isLight
+                  ? 'hover:bg-white/50 border-t-2 border-t-transparent'
+                  : 'hover:bg-[#1e293b]/50 border-t-2 border-t-transparent'
             )}
             onClick={() => setActiveSession(session.id)}
           >
             {/* Drag Handle (hidden unless needed) */}
-            <GripVertical className="w-3.5 h-3.5 text-gray-500 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0" />
+            <GripVertical className={cn(
+              "w-3.5 h-3.5 opacity-0 group-hover:opacity-100 cursor-grab flex-shrink-0",
+              isLight ? 'text-gray-400' : 'text-gray-500'
+            )} />
             
             {/* Terminal Icon */}
             <Terminal className={cn(
               'w-3.5 h-3.5 flex-shrink-0',
-              activeSessionId === session.id ? 'text-blue-400' : 'text-gray-500'
+              activeSessionId === session.id 
+                ? 'text-accent' 
+                : isLight ? 'text-gray-400' : 'text-gray-500'
             )} />
             
             {/* Tab Name */}
@@ -82,14 +100,21 @@ export function TerminalTabs({ onAddSession, onConfigClick }: TerminalTabsProps)
                 onChange={(e) => setEditName(e.target.value)}
                 onBlur={handleRenameSubmit}
                 onKeyDown={(e) => handleKeyDown(e, session.id)}
-                className="bg-[#0d1117] text-gray-200 text-sm px-1 py-0.5 rounded border border-blue-500 outline-none w-24"
+                className={cn(
+                  "text-sm px-1 py-0.5 rounded border outline-none w-24",
+                  isLight 
+                    ? 'bg-white text-gray-800 border-accent' 
+                    : 'bg-[#0f172a] text-gray-200 border-accent'
+                )}
                 autoFocus
                 onClick={(e) => e.stopPropagation()}
               />
             ) : (
               <span className={cn(
                 'text-sm truncate max-w-32',
-                activeSessionId === session.id ? 'text-gray-200' : 'text-gray-500 group-hover:text-gray-300'
+                activeSessionId === session.id 
+                  ? isLight ? 'text-gray-800' : 'text-gray-200'
+                  : isLight ? 'text-gray-500 group-hover:text-gray-700' : 'text-gray-500 group-hover:text-gray-300'
               )}>
                 {session.name}
               </span>
@@ -103,10 +128,16 @@ export function TerminalTabs({ onAddSession, onConfigClick }: TerminalTabsProps)
                   e.stopPropagation();
                   handleRename(session.id);
                 }}
-                className="p-0.5 hover:bg-[#30363d] rounded transition-colors"
+                className={cn(
+                  "p-0.5 rounded transition-colors",
+                  isLight ? 'hover:bg-gray-100' : 'hover:bg-gray-700'
+                )}
                 title="Rename"
               >
-                <Pencil className="w-3 h-3 text-gray-500" />
+                <Pencil className={cn(
+                  "w-3 h-3",
+                  isLight ? 'text-gray-400' : 'text-gray-500'
+                )} />
               </button>
               
               {/* Close */}
@@ -116,13 +147,17 @@ export function TerminalTabs({ onAddSession, onConfigClick }: TerminalTabsProps)
                   closeSession(session.id);
                 }}
                 className={cn(
-                  'p-0.5 hover:bg-[#30363d] rounded transition-colors',
+                  'p-0.5 rounded transition-colors',
+                  isLight ? 'hover:bg-gray-100' : 'hover:bg-gray-700',
                   sessions.length <= 1 && 'opacity-50 cursor-not-allowed'
                 )}
                 disabled={sessions.length <= 1}
                 title="Close"
               >
-                <X className="w-3 h-3 text-gray-500" />
+                <X className={cn(
+                  "w-3 h-3",
+                  isLight ? 'text-gray-400' : 'text-gray-500'
+                )} />
               </button>
             </div>
           </div>
@@ -131,10 +166,18 @@ export function TerminalTabs({ onAddSession, onConfigClick }: TerminalTabsProps)
         {/* Add Tab Button */}
         <button
           onClick={onAddSession}
-          className="flex items-center gap-1 px-2 py-2 hover:bg-[#161b22]/50 transition-colors border-r border-[#30363d]"
+          className={cn(
+            "flex items-center gap-1 px-2 py-2 transition-colors border-r",
+            isLight 
+              ? 'hover:bg-white/50 border-gray-200' 
+              : 'hover:bg-[#1e293b]/50 border-gray-700'
+          )}
           title="New Terminal (Cmd+T)"
         >
-          <Plus className="w-4 h-4 text-gray-500" />
+          <Plus className={cn(
+            "w-4 h-4",
+            isLight ? 'text-gray-400' : 'text-gray-500'
+          )} />
         </button>
       </div>
       
@@ -144,11 +187,15 @@ export function TerminalTabs({ onAddSession, onConfigClick }: TerminalTabsProps)
         <div className="relative">
           <button
             onClick={() => setDropdownOpen(!dropdownOpen)}
-            className="p-1.5 hover:bg-[#30363d] rounded transition-colors"
+            className={cn(
+              "p-1.5 rounded transition-colors",
+              isLight ? 'hover:bg-gray-100' : 'hover:bg-gray-700'
+            )}
             title="Terminal Settings"
           >
             <ChevronDown className={cn(
-              'w-4 h-4 text-gray-500 transition-transform',
+              'w-4 h-4 transition-transform',
+              isLight ? 'text-gray-400' : 'text-gray-500',
               dropdownOpen && 'rotate-180'
             )} />
           </button>
@@ -159,13 +206,23 @@ export function TerminalTabs({ onAddSession, onConfigClick }: TerminalTabsProps)
                 className="fixed inset-0 z-10" 
                 onClick={() => setDropdownOpen(false)} 
               />
-              <div className="absolute right-0 top-full mt-1 z-20 bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl py-1 min-w-48">
+              <div className={cn(
+                "absolute right-0 top-full mt-1 z-20 rounded-lg shadow-xl py-1 min-w-48 border",
+                isLight 
+                  ? 'bg-white border-gray-200' 
+                  : 'bg-[#1e293b] border-gray-700'
+              )}>
                 <button
                   onClick={() => {
                     onConfigClick?.();
                     setDropdownOpen(false);
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:bg-[#30363d] transition-colors"
+                  className={cn(
+                    "w-full flex items-center gap-2 px-3 py-2 text-sm transition-colors",
+                    isLight 
+                      ? 'text-gray-700 hover:bg-gray-50' 
+                      : 'text-gray-300 hover:bg-gray-700'
+                  )}
                 >
                   <Settings className="w-4 h-4" />
                   Configure Terminal...

@@ -9,6 +9,7 @@ import { useTerminalContext } from './TerminalProvider';
 import { PtyMessage } from './usePtyClient';
 import { TerminalTabs } from './TerminalTabs';
 import { cn } from '@/lib/utils';
+
 import '@xterm/xterm/css/xterm.css';
 
 interface XTermPanelProps {
@@ -76,26 +77,26 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
       fontSize: config.fontSize,
       fontFamily: config.fontFamily,
       theme: {
-        background: '#0d1117',
-        foreground: '#e6edf3',
-        cursor: '#58a6ff',
-        cursorAccent: '#0d1117',
-        black: '#484f58',
-        red: '#f85149',
-        green: '#3fb950',
-        yellow: '#d29922',
-        blue: '#58a6ff',
-        magenta: '#a371f7',
-        cyan: '#39c5cf',
-        white: '#b1bac4',
-        brightBlack: '#6e7681',
-        brightRed: '#ffa198',
-        brightGreen: '#7ee787',
-        brightYellow: '#e3b341',
-        brightBlue: '#79c0ff',
-        brightMagenta: '#d2a8ff',
-        brightCyan: '#56d4db',
-        brightWhite: '#ffffff',
+        background: '#0d0d0d',      /* Match --background */
+        foreground: '#fafafa',       /* Match --foreground */
+        cursor: '#8b5cf6',           /* Purple accent */
+        cursorAccent: '#0d0d0d',
+        black: '#121212',
+        red: '#ef4444',
+        green: '#22c55e',
+        yellow: '#eab308',
+        blue: '#3b82f6',
+        magenta: '#8b5cf6',          /* Purple accent */
+        cyan: '#06b6d4',
+        white: '#a1a1aa',
+        brightBlack: '#52525b',
+        brightRed: '#fca5a5',
+        brightGreen: '#86efac',
+        brightYellow: '#fde047',
+        brightBlue: '#93c5fd',
+        brightMagenta: '#c4b5fd',    /* Light purple */
+        brightCyan: '#67e8f9',
+        brightWhite: '#fafafa',
       },
       scrollback: config.scrollback,
       convertEol: true,
@@ -156,7 +157,7 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
     };
   }, []);
 
-  // Update terminal config when it changes
+  // Update terminal theme when app theme changes
   useEffect(() => {
     if (!xtermRef.current) return;
     
@@ -165,26 +166,34 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
       xtermRef.current.options.fontFamily = config.fontFamily;
       xtermRef.current.options.scrollback = config.scrollback;
       
-      if (localConfig.theme === 'light') {
-        xtermRef.current.options.theme = {
-          background: '#ffffff',
-          foreground: '#1a1a1a',
-          cursor: '#0066cc',
-        };
-      } else {
-        xtermRef.current.options.theme = {
-          background: '#0d1117',
-          foreground: '#e6edf3',
-          cursor: '#58a6ff',
-          cursorAccent: '#0d1117',
-        };
-      }
+      xtermRef.current.options.theme = {
+        background: '#0d0d0d',      /* Match --background */
+        foreground: '#fafafa',       /* Match --foreground */
+        cursor: '#8b5cf6',           /* Purple accent */
+        cursorAccent: '#0d0d0d',
+        black: '#121212',
+        red: '#ef4444',
+        green: '#22c55e',
+        yellow: '#eab308',
+        blue: '#3b82f6',
+        magenta: '#8b5cf6',          /* Purple accent */
+        cyan: '#06b6d4',
+        white: '#a1a1aa',
+        brightBlack: '#52525b',
+        brightRed: '#fca5a5',
+        brightGreen: '#86efac',
+        brightYellow: '#fde047',
+        brightBlue: '#93c5fd',
+        brightMagenta: '#c4b5fd',    /* Light purple */
+        brightCyan: '#67e8f9',
+        brightWhite: '#fafafa',
+      };
       
       fitAddonRef.current?.fit();
     } catch (err) {
       console.warn('Config update error:', err);
     }
-  }, [config, localConfig.theme]);
+  }, [config]);
 
   // Handle PTY output
   useEffect(() => {
@@ -482,7 +491,7 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
   return (
     <div 
       className={cn(
-        'flex flex-col h-full bg-[#0d1117]',
+        'flex flex-col h-full bg-background',
         state.isFullscreen && 'fixed inset-0 z-50'
       )}
       onClick={focusTerminal}
@@ -494,12 +503,14 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
       />
 
       {/* Terminal Header */}
-      <div className="flex items-center justify-between px-3 py-1.5 bg-[#161b22] border-b border-[#30363d]">
+      <div className={cn(
+        "flex items-center justify-between px-3 py-1.5 border-b bg-card border-border"
+      )}>
         <div className="flex items-center gap-2">
-          <Terminal className="w-4 h-4 text-gray-400" />
-          <span className="text-sm font-medium text-gray-300">Terminal</span>
+          <Terminal className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">Terminal</span>
           {activeSession && (
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-muted-foreground">
               {activeSession.cwd}
             </span>
           )}
@@ -516,7 +527,7 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
           
           {/* Processing indicator */}
           {state.isProcessing && (
-            <span className="flex items-center gap-1 text-xs text-gray-400">
+            <span className="flex items-center gap-1 text-xs text-muted-foreground">
               <span className="animate-spin">
                 <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
@@ -530,15 +541,15 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
           {/* Fullscreen */}
           <button
             onClick={() => setState(prev => ({ ...prev, isFullscreen: !prev.isFullscreen }))}
-            className="p-1 hover:bg-[#30363d] rounded transition-colors"
+            className="p-1 rounded transition-colors hover:bg-muted"
             title={state.isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
           >
             {state.isFullscreen ? (
-              <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" />
               </svg>
             ) : (
-              <svg className="w-4 h-4 text-gray-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-4 h-4 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" />
               </svg>
             )}
@@ -548,12 +559,12 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
 
       {/* Connection Error Banner */}
       {connectionError && (
-        <div className="flex items-center gap-2 px-3 py-1 bg-red-900/30 border-b border-red-800 text-xs text-red-400">
+        <div className="flex items-center gap-2 px-3 py-1 border-b text-xs bg-destructive/10 border-destructive/20 text-destructive">
           <AlertCircle className="w-3 h-3" />
           <span>{connectionError}</span>
           <button 
             onClick={() => { setConnectionError(null); connect(); }}
-            className="ml-auto hover:text-red-300 underline"
+            className="ml-auto hover:text-destructive/70 underline"
           >
             Retry
           </button>
@@ -564,19 +575,19 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
       <div className="flex-1 relative overflow-hidden">
         {/* Disconnected State Overlay */}
         {!ptyClient.connected && !ptyClient.connecting && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#0d1117]/95">
-            <WifiOff className="w-12 h-12 text-red-500 mb-4" />
-            <h3 className="text-lg font-semibold text-gray-300 mb-2">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/95">
+            <WifiOff className="w-12 h-12 text-destructive mb-4" />
+            <h3 className="text-lg font-semibold mb-2 text-foreground">
               Terminal Server Disconnected
             </h3>
-            <p className="text-sm text-gray-500 text-center max-w-md mb-4">
+            <p className="text-sm text-center max-w-md mb-4 text-muted-foreground">
               The PTY server is not running. You can still use the terminal with built-in commands, 
-              or start the server with <code className="bg-[#30363d] px-1.5 py-0.5 rounded">bun run dev:pty</code>
+              or start the server with <code className="bg-muted px-1.5 py-0.5 rounded">bun run dev:pty</code>
             </p>
             <div className="flex gap-2">
               <button
                 onClick={() => connect()}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-500 transition-colors flex items-center gap-2"
+                className="px-4 py-2 bg-primary text-primary-foreground text-sm rounded hover:bg-primary/90 transition-colors flex items-center gap-2"
               >
                 <Wifi className="w-4 h-4" />
                 Retry Connection
@@ -588,12 +599,12 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
                     xtermRef.current.write('\x1b[1;32m❯\x1b[0m ');
                   }
                 }}
-                className="px-4 py-2 bg-[#30363d] text-gray-300 text-sm rounded hover:bg-[#484f58] transition-colors"
+                className="px-4 py-2 bg-muted text-muted-foreground text-sm rounded hover:bg-muted/80 transition-colors"
               >
                 Use Fallback Mode
               </button>
             </div>
-            <div className="mt-6 text-xs text-gray-600">
+            <div className="mt-6 text-xs text-muted-foreground/60">
               <p>Built-in commands available: help, clear, echo, pwd, date, whoami, ls, cat, uname, hostname, env</p>
             </div>
           </div>
@@ -601,14 +612,14 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
         
         {/* Connecting State */}
         {ptyClient.connecting && (
-          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#0d1117]/90">
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/90">
             <div className="animate-spin mb-4">
-              <svg className="w-8 h-8 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg className="w-8 h-8 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
                 <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
               </svg>
             </div>
-            <p className="text-sm text-gray-400">Connecting to terminal server...</p>
+            <p className="text-sm text-muted-foreground">Connecting to terminal server...</p>
           </div>
         )}
         
@@ -623,7 +634,7 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
       </div>
 
       {/* Status Bar */}
-      <div className="flex items-center justify-between px-3 py-1 bg-[#161b22] border-t border-[#30363d] text-xs text-gray-500">
+      <div className="flex items-center justify-between px-3 py-1 border-t text-xs bg-card border-border text-muted-foreground">
         <span>
           {sessions.length} session{sessions.length !== 1 ? 's' : ''}
           {isReady && ' • xterm.js ready'}
@@ -643,43 +654,30 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
             className="fixed inset-0 bg-black/50 z-40" 
             onClick={() => setShowConfig(false)} 
           />
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 bg-[#161b22] border border-[#30363d] rounded-lg shadow-xl p-4 w-80">
-            <h3 className="text-sm font-medium text-gray-200 mb-4">Terminal Settings</h3>
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 rounded-lg shadow-xl p-4 w-80 border bg-card border-border">
+            <h3 className="text-sm font-medium mb-4 text-foreground">Terminal Settings</h3>
             
             {/* Font Size */}
             <div className="mb-4">
-              <label className="block text-xs text-gray-400 mb-1">Font Size</label>
+              <label className="block text-xs mb-1 text-muted-foreground">Font Size</label>
               <input
                 type="number"
                 value={localConfig.fontSize}
                 onChange={(e) => handleConfigChange('fontSize', parseInt(e.target.value))}
-                className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm text-gray-200"
+                className="w-full border rounded px-2 py-1 text-sm bg-background border-border text-foreground"
                 min="10"
                 max="24"
               />
             </div>
             
-            {/* Theme */}
-            <div className="mb-4">
-              <label className="block text-xs text-gray-400 mb-1">Theme</label>
-              <select
-                value={localConfig.theme}
-                onChange={(e) => handleConfigChange('theme', e.target.value)}
-                className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm text-gray-200"
-              >
-                <option value="dark">Dark (GitHub Dark)</option>
-                <option value="light">Light</option>
-              </select>
-            </div>
-            
             {/* Scrollback */}
             <div className="mb-4">
-              <label className="block text-xs text-gray-400 mb-1">Scrollback Lines</label>
+              <label className="block text-xs mb-1 text-muted-foreground">Scrollback Lines</label>
               <input
                 type="number"
                 value={localConfig.scrollback}
                 onChange={(e) => handleConfigChange('scrollback', parseInt(e.target.value))}
-                className="w-full bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-sm text-gray-200"
+                className="w-full border rounded px-2 py-1 text-sm bg-background border-border text-foreground"
                 min="100"
                 max="10000"
                 step="100"
@@ -690,13 +688,13 @@ export const XTermPanel = React.forwardRef<XTermPanelRef, XTermPanelProps>(funct
             <div className="flex justify-end gap-2">
               <button
                 onClick={() => setShowConfig(false)}
-                className="px-3 py-1 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+                className="px-3 py-1 text-sm transition-colors text-muted-foreground hover:text-foreground"
               >
                 Cancel
               </button>
               <button
                 onClick={saveConfig}
-                className="px-3 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-500 transition-colors"
+                className="px-3 py-1 text-sm bg-accent text-accent-foreground rounded hover:bg-accent/90 transition-colors"
               >
                 Save
               </button>

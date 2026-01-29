@@ -3,7 +3,7 @@
 import { useRef, useEffect, useCallback, useState } from "react";
 import { toast } from "sonner";
 import * as Sentry from "@sentry/nextjs";
-import { Terminal } from "lucide-react";
+import { Terminal, ChevronDown, ChevronUp, X, Plus } from "lucide-react";
 import { XTermPanel } from "@/components/terminal/XTermPanel";
 import { TerminalProvider } from "@/components/terminal/TerminalProvider";
 import WorkspacePanel from "@/components/WorkspacePanel";
@@ -18,6 +18,7 @@ import { PlanReviewModal } from "@/components/PlanReviewModal";
 import { useChat } from "@/hooks/useChat";
 import { useWorkspace } from "@/hooks/useWorkspace";
 import { useTerminal } from "@/hooks/useTerminal";
+import { cn } from "@/lib/utils";
 
 export default function Home() {
   // Plan/Build context
@@ -88,15 +89,44 @@ export default function Home() {
   const [outputFormat, setOutputFormat] = useState("React");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Claude Layout state - reorganized for new layout structure
-  const [chatPanelCollapsed, setChatPanelCollapsed] = useState(false);
-  const [filePanelCollapsed, setFilePanelCollapsed] = useState(false);
-  const [terminalPanelCollapsed, setTerminalPanelCollapsed] = useState(false);
+  // IDE Layout state
+  const [leftSidebarCollapsed, setLeftSidebarCollapsed] = useState(false);
+  const [rightSidebarCollapsed, setRightSidebarCollapsed] = useState(false);
+  
+  // Terminal state - docked in center panel
+  const [terminalExpanded, setTerminalExpanded] = useState(true);
+  const [terminalHeight, setTerminalHeight] = useState(180);
+  const [activeBottomTab, setActiveBottomTab] = useState<'terminal' | 'output'>('terminal');
+  const [isResizingTerminal, setIsResizingTerminal] = useState(false);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  // Handle terminal resize
+  useEffect(() => {
+    if (!isResizingTerminal) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const newHeight = window.innerHeight - e.clientY;
+      if (newHeight >= 100 && newHeight <= 400) {
+        setTerminalHeight(newHeight);
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizingTerminal(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizingTerminal]);
 
   // Plan approval handlers
   const handleApprovePlan = useCallback(() => {
@@ -152,7 +182,6 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
         updateWorkspaceFromOutput(output, mode);
       },
       onCheckpoint: () => {
-        // Create checkpoint before generation in build mode
         if (workspace) {
           const label = `Before generation (${new Date().toLocaleString()})`;
           createCheckpoint(label);
@@ -209,30 +238,6 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
     toast.success("Copied to clipboard");
   }, []);
 
-  // Keyboard shortcuts for panel toggles
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd/Ctrl + 1 to toggle chat panel (left)
-      if ((e.metaKey || e.ctrlKey) && e.key === '1') {
-        e.preventDefault();
-        setChatPanelCollapsed(prev => !prev);
-      }
-      // Cmd/Ctrl + 2 to toggle file panel (right)
-      if ((e.metaKey || e.ctrlKey) && e.key === '2') {
-        e.preventDefault();
-        setFilePanelCollapsed(prev => !prev);
-      }
-      // Cmd/Ctrl + 3 to toggle terminal panel (bottom)
-      if ((e.metaKey || e.ctrlKey) && e.key === '3') {
-        e.preventDefault();
-        setTerminalPanelCollapsed(prev => !prev);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
-
   return (
     <main className="h-screen flex flex-col bg-background text-foreground overflow-hidden">
       <Header
@@ -251,11 +256,178 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
         outputFormat={outputFormat}
       />
 
-      {/* Claude Layout - 3 Panel Horizontal + Bottom Terminal */}
+      {/* IDE Layout - Left Sidebar / Center (with docked Terminal) / Right Sidebar */}
       <div className="flex-1 overflow-hidden">
         <ClaudeLayout
-          // Left panel - Chat
-          leftPanel={
+          // Left Sidebar - File Explorer
+          leftSidebar={
+            <FileExplorer
+              files={workspace?.files || {}}
+              activePath={workspace?.activePath || null}
+              onSelectPath={selectPath}
+              onCreateFile={createFile}
+              onDeleteFile={deleteFile}
+              onRenameFile={renameFile}
+              onCreateFolder={(_path: string) => {
+                toast.info("Folder creation will be available after file creation");
+              }}
+              projectId="mint-ai"
+            />
+          }
+          leftCollapsed={leftSidebarCollapsed}
+          onLeftCollapse={setLeftSidebarCollapsed}
+          defaultLeftWidth={260}
+          minLeftWidth={200}
+          
+          // Center Panel - Code Editor with docked Terminal
+          centerPanel={
+            <div className="h-full flex flex-col bg-editor">
+              {/* Code Editor Area */}
+              <div className={cn(
+                "flex-1 overflow-hidden",
+                !terminalExpanded && "flex-1"
+              )}>
+                {!displayWorkspace && !isLoading && messages.length === 0 ? (
+                  <div className="h-full flex items-center justify-center text-muted-foreground/40">
+                    <div className="text-center space-y-4">
+                      <div className="w-16 h-16 rounded-2xl bg-card flex items-center justify-center mx-auto">
+                        <Terminal size={32} className="text-accent" />
+                      </div>
+                      <p className="text-lg font-medium text-foreground">Ready to build</p>
+                      <p className="text-sm text-muted-foreground">Describe what you want to create</p>
+                    </div>
+                  </div>
+                ) : (
+                  <WorkspacePanel
+                    workspace={displayWorkspace}
+                    readOnly={displayReadOnly}
+                    isStreaming={isLoading}
+                    onSelectPath={selectPath}
+                    onUpdateFile={updateFile}
+                    onResetWorkspace={resetWorkspace}
+                    onRevertFile={revertFile}
+                    onRevertAll={revertAll}
+                    onCreateCheckpoint={() => {
+                      const label = window.prompt("Checkpoint name", `Checkpoint (${new Date().toLocaleString()})`);
+                      if (label) createCheckpoint(label);
+                    }}
+                    onRestoreCheckpoint={restoreCheckpoint}
+                    onDownloadZip={async () => {
+                      if (!displayWorkspace) return;
+                      const filesList = Object.entries(displayWorkspace.files).map(([path, content]) => ({
+                        path,
+                        content,
+                      }));
+                      try {
+                        await downloadProjectAsZip(filesList, displayWorkspace.projectName || "workspace");
+                        toast.success("Downloaded ZIP");
+                      } catch (e) {
+                        console.error(e);
+                        toast.error("Failed to download ZIP");
+                      }
+                    }}
+                    onDownloadPatch={() => {
+                      if (!workspace?.baseFiles) {
+                        toast.error("No base snapshot to diff against yet");
+                        return;
+                      }
+                      const patch = unifiedDiffForFiles(workspace.baseFiles, workspace.files);
+                      if (!patch.trim()) {
+                        toast.message("No changes to export");
+                        return;
+                      }
+                      const name = `${workspace.projectName || "workspace"}.patch`;
+                      downloadTextFile(patch, name, "text/x-diff;charset=utf-8");
+                      toast.success(`Downloaded ${name}`);
+                    }}
+                    pendingChanges={pendingChanges}
+                    onAcceptPendingChange={acceptPendingChange}
+                    onRejectPendingChange={rejectPendingChange}
+                    onAcceptAllPendingChanges={acceptAllPendingChanges}
+                    onRejectAllPendingChanges={rejectAllPendingChanges}
+                    onOpenDiffModal={handleOpenDiffModal}
+                  />
+                )}
+              </div>
+
+              {/* Terminal Section - Docked to center panel */}
+              <div className="border-t border-border">
+                {/* Terminal Tabs */}
+                <div className="flex items-center justify-between bg-card border-b border-border">
+                  <div className="flex items-center">
+                    <button
+                      onClick={() => setActiveBottomTab('output')}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors",
+                        activeBottomTab === 'output' 
+                          ? "bg-background text-foreground border-t-2 border-t-accent" 
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-green-500" />
+                      Output
+                    </button>
+                    <button
+                      onClick={() => setActiveBottomTab('terminal')}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium border-r border-border transition-colors",
+                        activeBottomTab === 'terminal' 
+                          ? "bg-background text-foreground border-t-2 border-t-accent" 
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                      )}
+                    >
+                      <Terminal size={12} />
+                      Terminal
+                    </button>
+                    <button className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-muted border-r border-border transition-colors">
+                      <Plus size={12} />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-1 pr-2">
+                    <button 
+                      onClick={() => setTerminalExpanded(!terminalExpanded)}
+                      className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors"
+                    >
+                      {terminalExpanded ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                    </button>
+                    <button className="p-1 text-muted-foreground hover:text-foreground hover:bg-muted rounded transition-colors">
+                      <X size={14} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Terminal Content */}
+                {terminalExpanded && (
+                  <>
+                    {/* Resize Handle */}
+                    <div
+                      onMouseDown={() => setIsResizingTerminal(true)}
+                      className={cn(
+                        "h-1 cursor-row-resize bg-transparent hover:bg-accent/50 transition-colors",
+                        isResizingTerminal && "bg-accent"
+                      )}
+                    />
+                    <div 
+                      className="bg-background"
+                      style={{ height: terminalHeight }}
+                    >
+                      <TerminalProvider>
+                        <XTermPanel
+                          onCommand={async (command) => {
+                            await executeCommand(command);
+                          }}
+                        />
+                      </TerminalProvider>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          }
+          minCenterWidth={400}
+          
+          // Right Sidebar - AI Chat
+          rightSidebar={
             <ChatPanel
               messages={messages}
               isLoading={isLoading}
@@ -277,114 +449,10 @@ The plan contains ${currentPlan.steps.length} steps. Begin implementing step 1: 
               onCopyCode={handleCopyCode}
             />
           }
-          leftCollapsed={chatPanelCollapsed}
-          onLeftCollapse={setChatPanelCollapsed}
-          defaultLeftWidth={320}
-          minLeftWidth={280}
-          
-          // Center panel - Code Editor (Workspace)
-          centerPanel={
-            <div className="h-full flex flex-col">
-              <div className="flex-1 rounded-xl border border-border/40 bg-background shadow-sm overflow-hidden relative">
-                {!displayWorkspace && !isLoading && messages.length === 0 ? (
-                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40 pointer-events-none">
-                    <div className="text-center space-y-4">
-                      <div className="w-16 h-16 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-4">
-                        <Terminal size={32} />
-                      </div>
-                      <p className="text-lg font-medium">Ready to build</p>
-                      <p className="text-sm">Describe what you want to create</p>
-                    </div>
-                  </div>
-                ) : null}
-                <WorkspacePanel
-                  workspace={displayWorkspace}
-                  readOnly={displayReadOnly}
-                  isStreaming={isLoading}
-                  onSelectPath={selectPath}
-                  onUpdateFile={updateFile}
-                  onResetWorkspace={resetWorkspace}
-                  onRevertFile={revertFile}
-                  onRevertAll={revertAll}
-                  onCreateCheckpoint={() => {
-                    const label = window.prompt("Checkpoint name", `Checkpoint (${new Date().toLocaleString()})`);
-                    if (label) createCheckpoint(label);
-                  }}
-                  onRestoreCheckpoint={restoreCheckpoint}
-                  onDownloadZip={async () => {
-                    if (!displayWorkspace) return;
-                    const filesList = Object.entries(displayWorkspace.files).map(([path, content]) => ({
-                      path,
-                      content,
-                    }));
-                    try {
-                      await downloadProjectAsZip(filesList, displayWorkspace.projectName || "workspace");
-                      toast.success("Downloaded ZIP");
-                    } catch (e) {
-                      console.error(e);
-                      toast.error("Failed to download ZIP");
-                    }
-                  }}
-                  onDownloadPatch={() => {
-                    if (!workspace?.baseFiles) {
-                      toast.error("No base snapshot to diff against yet");
-                      return;
-                    }
-                    const patch = unifiedDiffForFiles(workspace.baseFiles, workspace.files);
-                    if (!patch.trim()) {
-                      toast.message("No changes to export");
-                      return;
-                    }
-                    const name = `${workspace.projectName || "workspace"}.patch`;
-                    downloadTextFile(patch, name, "text/x-diff;charset=utf-8");
-                    toast.success(`Downloaded ${name}`);
-                  }}
-                  pendingChanges={pendingChanges}
-                  onAcceptPendingChange={acceptPendingChange}
-                  onRejectPendingChange={rejectPendingChange}
-                  onAcceptAllPendingChanges={acceptAllPendingChanges}
-                  onRejectAllPendingChanges={rejectAllPendingChanges}
-                  onOpenDiffModal={handleOpenDiffModal}
-                />
-              </div>
-            </div>
-          }
-          minCenterWidth={400}
-          
-          // Right panel - File Explorer
-          rightPanel={
-            <FileExplorer
-              files={workspace?.files || {}}
-              activePath={workspace?.activePath || null}
-              onSelectPath={selectPath}
-              onCreateFile={createFile}
-              onDeleteFile={deleteFile}
-              onRenameFile={renameFile}
-              onCreateFolder={(_path: string) => {
-                toast.info("Folder creation will be available after file creation");
-              }}
-              projectId="mint-ai"
-            />
-          }
-          rightCollapsed={filePanelCollapsed}
-          onRightCollapse={setFilePanelCollapsed}
-          defaultRightWidth={260}
-          minRightWidth={200}
-          
-          // Bottom panel - Terminal
-          bottomPanel={
-            <TerminalProvider>
-              <XTermPanel
-                onCommand={async (command) => {
-                  await executeCommand(command);
-                }}
-              />
-            </TerminalProvider>
-          }
-          bottomCollapsed={terminalPanelCollapsed}
-          onBottomCollapse={setTerminalPanelCollapsed}
-          defaultBottomHeight={200}
-          minBottomHeight={120}
+          rightCollapsed={rightSidebarCollapsed}
+          onRightCollapse={setRightSidebarCollapsed}
+          defaultRightWidth={380}
+          minRightWidth={300}
         />
       </div>
 

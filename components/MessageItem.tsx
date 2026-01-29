@@ -59,7 +59,7 @@ interface MessageItemProps {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Tool Activity Block (for the activity timeline)
+// Tool Activity Block
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ToolActivityBlock({ tool }: { tool: ToolItem }) {
@@ -82,22 +82,35 @@ function ToolActivityBlock({ tool }: { tool: ToolItem }) {
       .replace(/^\w/, (c) => c.toUpperCase());
   };
 
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'running':
+        return 'text-accent';
+      case 'complete':
+        return 'text-emerald-500';
+      case 'error':
+        return 'text-destructive';
+      default:
+        return 'text-muted-foreground';
+    }
+  };
+
   return (
-    <div className="flex items-center gap-2 px-3 py-1.5 bg-secondary/10 border border-secondary/30 text-xs cyber-chamfer-sm">
-      <span className="text-secondary">
+    <div className="flex items-center gap-2 px-3 py-1.5 bg-accent/5 border border-accent/20 rounded-md">
+      <span className={cn("text-accent", getStatusColor(tool.status))}>
         {getToolIcon(tool.toolName)}
       </span>
-      <span className="font-mono font-medium text-secondary uppercase tracking-wider">
+      <span className="text-xs font-medium text-foreground">
         {getToolLabel(tool.toolName)}
       </span>
       {tool.status === 'running' && (
-        <Loader2 className="w-3 h-3 animate-spin ml-auto text-secondary" />
+        <Loader2 className="w-3 h-3 animate-spin ml-auto text-accent" />
       )}
       {tool.status === 'complete' && (
         <CheckCircle className="w-3 h-3 ml-auto text-emerald-500" />
       )}
       {tool.message && (
-        <span className="text-muted-foreground truncate max-w-[150px] font-mono">
+        <span className="text-muted-foreground truncate max-w-[150px] text-xs">
           {tool.message}
         </span>
       )}
@@ -115,13 +128,13 @@ function ToolResultsBlock({ results }: { results: string }) {
   const isLong = lines.length > 5;
 
   return (
-    <div className="w-full max-w-[85%] bg-muted/30 border border-border/40 cyber-chamfer-sm">
+    <div className="w-full max-w-[85%] bg-muted/50 border border-border rounded-lg overflow-hidden">
       <button
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/50 transition-colors"
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-muted/70 transition-colors"
       >
-        <div className="w-2 h-2 bg-primary shadow-neon-sm" />
-        <span className="text-muted-foreground text-[11px] font-mono uppercase tracking-wider">Workspace Action Result</span>
+        <div className="w-2 h-2 rounded-full bg-accent" />
+        <span className="text-muted-foreground text-xs">Workspace Action Result</span>
         {isLong && (
           <ChevronDown
             className={cn(
@@ -139,7 +152,7 @@ function ToolResultsBlock({ results }: { results: string }) {
             exit={{ height: 0, opacity: 0 }}
             className="overflow-hidden"
           >
-            <pre className="px-3 py-2 font-mono text-[11px] text-muted-foreground whitespace-pre-wrap border-t border-border/40">
+            <pre className="px-3 py-2 font-mono text-xs text-muted-foreground whitespace-pre-wrap border-t border-border">
               {results.trim()}
             </pre>
           </motion.div>
@@ -193,7 +206,7 @@ function MessageItemComponent({
         animate={{ opacity: 1, y: 0 }}
         className="flex justify-end"
       >
-        <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-br-sm bg-primary text-primary-foreground shadow-md shadow-primary/10 text-sm leading-relaxed">
+        <div className="message-user">
           {message.content}
         </div>
       </motion.div>
@@ -211,12 +224,12 @@ function MessageItemComponent({
       {hasActivityTimeline && (
         <div className="relative pl-4 space-y-2 w-full">
           {/* Vertical timeline line */}
-          <div className="absolute left-1.5 top-2 bottom-2 w-px bg-gradient-to-b from-primary/40 via-primary/20 to-transparent" />
+          <div className="absolute left-1.5 top-2 bottom-2 w-px bg-gradient-to-b from-accent/40 via-accent/20 to-transparent" />
 
           {/* Thinking blocks */}
           {message.thinking?.map((thinking, idx) => (
             <div key={`thinking-${idx}`} className="relative">
-              <div className="absolute -left-2.5 top-2 w-2 h-2 rounded-full bg-primary/60 ring-2 ring-background" />
+              <div className="absolute -left-2.5 top-2 w-2 h-2 rounded-full bg-accent/60 ring-2 ring-background" />
               <ThinkingBlock
                 content={thinking.content}
                 thinkingType={thinking.thinkingType}
@@ -242,7 +255,7 @@ function MessageItemComponent({
 
       {/* Message Content */}
       {message.content && (
-        <div className="max-w-[85%] px-4 py-3 rounded-2xl rounded-bl-sm bg-muted text-foreground text-sm leading-relaxed">
+        <div className="message-assistant">
           {isPlanContent ? (
             <PlanContentRenderer
               content={message.content}
@@ -278,10 +291,10 @@ function MessageItemComponent({
           {activeSkill ? (
             <SkillThinkingIndicator skill={activeSkill} />
           ) : (
-            <div className="bg-muted px-4 py-3 cyber-chamfer-sm flex items-center gap-1.5">
-              <div className="w-1.5 h-1.5 bg-primary shadow-neon-sm animate-bounce" />
-              <div className="w-1.5 h-1.5 bg-primary shadow-neon-sm animate-bounce [animation-delay:0.1s]" />
-              <div className="w-1.5 h-1.5 bg-primary shadow-neon-sm animate-bounce [animation-delay:0.2s]" />
+            <div className="bg-muted px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-accent animate-bounce" />
+              <div className="w-2 h-2 rounded-full bg-accent animate-bounce [animation-delay:0.1s]" />
+              <div className="w-2 h-2 rounded-full bg-accent animate-bounce [animation-delay:0.2s]" />
             </div>
           )}
         </div>

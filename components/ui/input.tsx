@@ -33,11 +33,11 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
           type={type}
           className={cn(
             // Base styles
-            "flex h-9 w-full rounded-md border border-border bg-surface px-3 py-1 text-sm text-foreground shadow-sm",
+            "flex h-9 w-full rounded-md border border-border bg-background px-3 py-1 text-sm text-foreground shadow-sm",
             // Placeholder
             "placeholder:text-muted-foreground",
             // Focus state
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-background",
             // Disabled state
             "disabled:cursor-not-allowed disabled:opacity-50",
             // Transitions

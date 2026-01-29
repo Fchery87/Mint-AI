@@ -1,7 +1,7 @@
 /**
  * Streaming Indicator Component
  * 
- * Cyberpunk-styled streaming status indicator with animated effects
+ * Clean streaming status indicator with subtle animations
  */
 
 import { motion } from "framer-motion";
@@ -36,17 +36,17 @@ const skillColors: Record<SkillType, string> = {
   [SkillType.DEBUG]: "text-rose-500",
   [SkillType.REVIEW]: "text-blue-500",
   [SkillType.SEARCH]: "text-cyan-500",
-  [SkillType.GENERAL]: "text-primary",
+  [SkillType.GENERAL]: "text-accent",
 };
 
 const skillGradients: Record<SkillType, string> = {
-  [SkillType.BRAINSTORM]: "from-violet-500/20 to-violet-600/10",
-  [SkillType.PLAN]: "from-amber-500/20 to-amber-600/10",
-  [SkillType.CODE]: "from-emerald-500/20 to-emerald-600/10",
-  [SkillType.DEBUG]: "from-rose-500/20 to-rose-600/10",
-  [SkillType.REVIEW]: "from-blue-500/20 to-blue-600/10",
-  [SkillType.SEARCH]: "from-cyan-500/20 to-cyan-600/10",
-  [SkillType.GENERAL]: "from-primary/20 to-primary/10",
+  [SkillType.BRAINSTORM]: "from-violet-500/10 to-violet-600/5",
+  [SkillType.PLAN]: "from-amber-500/10 to-amber-600/5",
+  [SkillType.CODE]: "from-emerald-500/10 to-emerald-600/5",
+  [SkillType.DEBUG]: "from-rose-500/10 to-rose-600/5",
+  [SkillType.REVIEW]: "from-blue-500/10 to-blue-600/5",
+  [SkillType.SEARCH]: "from-cyan-500/10 to-cyan-600/5",
+  [SkillType.GENERAL]: "from-accent/10 to-accent/5",
 };
 
 export function StreamingIndicator({ 
@@ -55,8 +55,8 @@ export function StreamingIndicator({
   className 
 }: StreamingIndicatorProps) {
   const Icon = skill ? skillIcons[skill.type] : Terminal;
-  const colorClass = skill ? skillColors[skill.type] : "text-primary";
-  const gradientClass = skill ? skillGradients[skill.type] : "from-primary/20 to-primary/10";
+  const colorClass = skill ? skillColors[skill.type] : "text-accent";
+  const gradientClass = skill ? skillGradients[skill.type] : "from-accent/10 to-accent/5";
 
   return (
     <motion.div
@@ -64,10 +64,10 @@ export function StreamingIndicator({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -10 }}
       className={cn(
-        "flex items-center gap-3 p-3 rounded-xl",
-        "bg-gradient-to-r backdrop-blur-sm border",
+        "flex items-center gap-3 p-3 rounded-lg",
+        "bg-gradient-to-r",
         gradientClass,
-        "border-white/10 dark:border-white/5",
+        "border border-border/50",
         className
       )}
     >
@@ -108,7 +108,7 @@ export function StreamingIndicator({
       {/* Status Text */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className={cn("text-xs font-mono font-bold uppercase tracking-wider", colorClass)}>
+          <span className={cn("text-xs font-medium uppercase tracking-wide", colorClass)}>
             {skill?.type || "Processing"}
           </span>
           
@@ -134,7 +134,7 @@ export function StreamingIndicator({
         </div>
         
         {status && (
-          <div className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider truncate">
+          <div className="text-xs text-muted-foreground truncate">
             {status}
           </div>
         )}
@@ -143,8 +143,8 @@ export function StreamingIndicator({
       {/* Stage Badge */}
       {skill?.stage && (
         <div className={cn(
-          "px-2 py-1 rounded text-[10px] font-mono uppercase tracking-wider",
-          "bg-background/50 border border-white/10",
+          "px-2 py-0.5 rounded text-xs font-medium uppercase tracking-wide",
+          "bg-background/50 border border-border",
           colorClass
         )}>
           {skill.stage}
@@ -156,7 +156,7 @@ export function StreamingIndicator({
         <motion.div
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          className="w-2 h-2 rounded-full bg-emerald-500 shadow-neon-emerald"
+          className="w-2 h-2 rounded-full bg-emerald-500"
           title={`${Math.round(skill.confidence * 100)}% confidence`}
         />
       )}

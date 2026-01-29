@@ -4,10 +4,10 @@ import * as React from "react"
 import { Moon, Sun, Monitor } from "lucide-react"
 import { useTheme } from "next-themes"
 import { cn } from "@/lib/utils"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion"
 
 export function ModeToggle() {
-  const { setTheme, theme } = useTheme()
+  const { setTheme, theme, resolvedTheme } = useTheme()
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
@@ -18,40 +18,53 @@ export function ModeToggle() {
     return <div className="w-9 h-9" /> // Avoid hydration mismatch
   }
 
-  const modes = [
-    { name: "light", icon: Sun },
-    { name: "dark", icon: Moon },
-    { name: "system", icon: Monitor },
-  ]
+  const currentTheme = theme === "system" ? resolvedTheme : theme
+  
+  const cycleTheme = () => {
+    if (theme === "light") setTheme("dark")
+    else if (theme === "dark") setTheme("system")
+    else setTheme("light")
+  }
 
   return (
-    <div className="flex items-center p-1 bg-muted/50 border border-border/40 rounded-full">
-      {modes.map((mode) => {
-        const Icon = mode.icon
-        const isActive = theme === mode.name
-        
-        return (
-          <button
-            key={mode.name}
-            onClick={() => setTheme(mode.name)}
-            className={cn(
-              "relative w-7 h-7 flex items-center justify-center rounded-full text-muted-foreground transition-all duration-200",
-              isActive && "text-foreground"
-            )}
+    <button
+      onClick={cycleTheme}
+      className={cn(
+        "relative flex items-center justify-center w-9 h-9 rounded-md",
+        "bg-muted text-muted-foreground hover:text-foreground",
+        "transition-colors duration-fast focus-ring"
+      )}
+      title={`Theme: ${theme} (click to cycle)`}
+    >
+      <AnimatePresence mode="wait" initial={false}>
+        {currentTheme === "light" && (
+          <motion.div
+            key="light"
+            initial={{ scale: 0, rotate: -90 }}
+            animate={{ scale: 1, rotate: 0 }}
+            exit={{ scale: 0, rotate: 90 }}
+            transition={{ duration: 0.2 }}
           >
-            {isActive && (
-              <motion.div
-                layoutId="theme-active"
-                className="absolute inset-0 bg-background rounded-full shadow-sm"
-                transition={{ type: "spring", bounce: 0.2, duration: 0.6 }}
-              />
-            )}
-            <span className="relative z-10">
-              <Icon size={14} />
-            </span>
-          </button>
-        )
-      })}
-    </div>
+            <Sun size={16} className="text-amber-500" />
+          </motion.div>
+        )}
+        {currentTheme === "dark" && (
+          <motion.div
+            key="dark"
+            initial={{ scale: 0, rotate: -90 }}
+            animate={{ scale: 1, rotate: 0 }}
+            exit={{ scale: 0, rotate: 90 }}
+            transition={{ duration: 0.2 }}
+          >
+            <Moon size={16} className="text-indigo-400" />
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Subtle indicator dot for system mode */}
+      {theme === "system" && (
+        <span className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full bg-accent" />
+      )}
+    </button>
   )
 }

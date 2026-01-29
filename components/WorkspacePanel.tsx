@@ -18,8 +18,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { WorkspaceState, PendingChange } from "@/lib/workspace";
 import { getLanguageForPath, workspaceToProjectFiles } from "@/lib/workspace";
-import { buildFileTree } from "@/lib/project-types";
-import FileTree from "@/components/FileTree";
+
 import { PreviewRouter } from "@/components/PreviewRouter";
 import { ChangesetReview } from "@/components/ChangesetReview";
 import { unifiedDiffForFile } from "@/lib/diff";
@@ -129,13 +128,7 @@ function WorkspacePanelComponent({
   const activeContent = activePath ? files[activePath] || "" : "";
   const activeLanguage = activePath ? getLanguageForPath(activePath) : "plaintext";
 
-  const showFileTree = workspace ? Object.keys(files).length > 0 : false;
-
-  const treeNodes = useMemo(() => {
-    if (!workspace) return [];
-    const projectFiles = workspaceToProjectFiles(files);
-    return buildFileTree(projectFiles);
-  }, [workspace, files]);
+  // File tree removed - we use the left sidebar FileExplorer instead
 
   const diffText = useMemo(() => {
     if (!workspace || !baseFiles || !activePath) return "";
@@ -332,36 +325,10 @@ function WorkspacePanelComponent({
       {topBar}
 
       <div className="flex-1 flex overflow-hidden">
-        {showFileTree && (
-          <div className="w-64 flex-shrink-0 border-r border-border/40 overflow-y-auto bg-muted/20">
-            <div className="p-2">
-              <FileTree
-                nodes={treeNodes}
-                selectedPath={activePath}
-                onSelectFile={onSelectPath}
-              />
-            </div>
-            
-            {/* Pending Changes Section */}
-            {Object.keys(pendingChanges).length > 0 && onAcceptPendingChange && onRejectPendingChange && (
-              <div className="border-t border-border/40 p-2">
-                <ChangesetReview
-                  pendingChanges={pendingChanges}
-                  onAcceptAll={onAcceptAllPendingChanges || (() => {})}
-                  onRejectAll={onRejectAllPendingChanges || (() => {})}
-                  onAcceptFile={onAcceptPendingChange}
-                  onRejectFile={onRejectPendingChange}
-                  onOpenDiffModal={onOpenDiffModal || (() => {})}
-                />
-              </div>
-            )}
-          </div>
-        )}
-
-        <div className="flex-1 overflow-hidden flex flex-col bg-background">
+        <div className="flex-1 overflow-hidden flex flex-col bg-editor">
           {/* File header for Editor mode */}
           {activeTab === "editor" && activePath && (
-            <div className="flex items-center gap-2 px-4 py-2 min-w-0 bg-[#f3f3f3] dark:bg-[#21252b] border-b border-border/20 dark:border-[#3e4451]/50">
+            <div className="flex items-center gap-2 px-4 py-2 min-w-0 bg-card border-b border-border">
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-[#ff5f56]" />
                 <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
@@ -387,7 +354,7 @@ function WorkspacePanelComponent({
           )}
 
           {/* Content */}
-          <div className="flex-1 overflow-auto bg-[#fafafa] dark:bg-[#282c34]">
+          <div className="flex-1 overflow-auto bg-editor">
             {activeTab === "preview" ? (
               isStreaming ? (
                 <div className="h-full flex items-center justify-center text-muted-foreground/60">

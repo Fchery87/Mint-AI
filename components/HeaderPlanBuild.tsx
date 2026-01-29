@@ -1,18 +1,15 @@
 "use client";
 
-import { Terminal, ClipboardList, Hammer, Pause, Play, Search } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { Search, Command, Sparkles, Globe, Folder, Terminal as TerminalIcon, Layout, Settings, Play } from "lucide-react";
+import { motion } from "framer-motion";
 import { Logo } from "@/components/ui/logo";
-import { ModeToggle } from "@/components/mode-toggle";
-import { CyberBadge, GlitchText } from "@/components/ui";
-import type { InteractionMode } from "@/types/plan-build";
-import { BuildStatus, PlanStatus } from "@/types/plan-build";
+import { cn } from "@/lib/utils";
 
 interface HeaderProps {
   sessionCost: { cost: string; tokens: string } | null;
-  mode: InteractionMode;
-  planStatus: PlanStatus | null;
-  buildStatus: BuildStatus | null;
+  mode: "plan" | "build";
+  planStatus: string | null;
+  buildStatus: string | null;
   progress: number;
   statusLabel: string;
   isBuilding: boolean;
@@ -21,173 +18,89 @@ interface HeaderProps {
   onResumeBuild: () => void;
   webSearch: boolean;
   setWebSearch: (value: boolean) => void;
-  isSearching?: boolean;
   outputFormat: string;
 }
 
 export function Header({
   sessionCost,
   mode,
-  planStatus,
-  buildStatus,
+  isBuilding,
   progress,
   statusLabel,
-  isBuilding,
-  isPaused,
-  onPauseBuild,
-  onResumeBuild,
   webSearch,
   setWebSearch,
-  isSearching = false,
   outputFormat,
 }: HeaderProps) {
-  const isPlanMode = mode === "plan";
-  const isBuildMode = mode === "build";
-
   return (
     <motion.header
       initial={{ y: -20, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="h-14 px-4 lg:px-6 flex items-center justify-between border-b border-primary/20 bg-void-black/95 backdrop-blur supports-[backdrop-filter]:bg-void-black/60 cyber-grid opacity-90"
+      className="h-12 px-4 flex items-center justify-between border-b border-border bg-card"
     >
-      {/* Left Section - Logo */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Logo />
-          <GlitchText 
-            className="font-display font-bold text-lg tracking-widest text-primary"
-            enableGlitch={isBuilding}
-          >
-            MINT_AI
-          </GlitchText>
+      {/* Left - Logo */}
+      <div className="flex items-center gap-4">
+        <Logo size="sm" />
+        
+        {/* Search Bar */}
+        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 bg-muted rounded-md border border-border/50 hover:border-border transition-colors cursor-pointer">
+          <Search size={14} className="text-muted-foreground" />
+          <span className="text-sm text-muted-foreground">Ask AI & Search</span>
+          <div className="flex items-center gap-1 text-xs text-muted-foreground/60 ml-2">
+            <Command size={12} />
+            <span>K</span>
+          </div>
         </div>
       </div>
 
-      {/* Right Section - Controls */}
-      <div className="flex items-center gap-2 lg:gap-3">
-        {/* Session Cost Badge */}
-        {sessionCost && (
-          <CyberBadge variant="primary" shape="sharp" className="hidden sm:flex gap-1.5 border-primary/30">
-            <Terminal size={10} className="text-primary" />
-            <span className="font-mono text-xs">{sessionCost.tokens} · {sessionCost.cost}</span>
-          </CyberBadge>
+      {/* Center - Status */}
+      <div className="hidden lg:flex items-center gap-4">
+        {isBuilding && (
+          <div className="flex items-center gap-2">
+            <div className="w-24 h-1 bg-muted rounded-full overflow-hidden">
+              <div 
+                className="h-full bg-accent rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <span className="text-xs text-muted-foreground">{progress}%</span>
+          </div>
         )}
+        {statusLabel && !isBuilding && (
+          <span className="text-xs text-muted-foreground">{statusLabel}</span>
+        )}
+      </div>
 
-        {/* Mode Indicator */}
-        <div className="hidden lg:flex items-center gap-2">
-          <AnimatePresence mode="wait">
-            {isPlanMode && (
-              <motion.div
-                key="plan-mode"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                className="flex items-center gap-2"
-              >
-                <CyberBadge 
-                  variant="secondary" 
-                  showDot={planStatus !== PlanStatus.IDLE}
-                  shape="sharp"
-                  className="gap-1.5"
-                >
-                  <ClipboardList size={12} className="text-secondary" />
-                  <span className="text-xs uppercase tracking-widest">Plan</span>
-                  {planStatus && planStatus !== PlanStatus.IDLE && (
-                    <span className="text-secondary/80 max-w-24 truncate">
-                      {statusLabel}
-                    </span>
-                  )}
-                </CyberBadge>
-              </motion.div>
-            )}
-
-            {isBuildMode && (
-              <motion.div
-                key="build-mode"
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: 10 }}
-                className="flex items-center gap-2"
-              >
-                <CyberBadge 
-                  variant="primary" 
-                  showDot={isBuilding}
-                  shape="sharp"
-                  className="gap-1.5"
-                >
-                  <Hammer size={12} />
-                  <span className="text-xs uppercase tracking-widest">Build</span>
-                  
-                  {/* Progress bar for build mode */}
-                  {buildStatus === BuildStatus.EXECUTING && (
-                    <div className="flex items-center gap-2">
-                      <div className="w-12 h-1 bg-primary-foreground/20 overflow-hidden">
-                        <motion.div
-                          className="h-full bg-primary-foreground"
-                          initial={{ width: 0 }}
-                          animate={{ width: `${progress}%` }}
-                          transition={{ duration: 0.3 }}
-                        />
-                      </div>
-                      <span className="text-xs font-mono">{progress}%</span>
-                    </div>
-                  )}
-
-                  {/* Pause/Resume button */}
-                  {(isBuilding || isPaused) && (
-                    <button
-                      onClick={isPaused ? onResumeBuild : onPauseBuild}
-                      className="p-0.5 hover:bg-primary-foreground/10 transition-colors focus:outline-none focus:ring-1 focus:ring-primary-foreground"
-                      title={isPaused ? "Resume build" : "Pause build"}
-                    >
-                      {isPaused ? (
-                        <Play size={10} />
-                      ) : (
-                        <Pause size={10} />
-                      )}
-                    </button>
-                  )}
-
-                  {buildStatus && (
-                    <span className="text-xs text-primary-foreground/80 max-w-24 truncate">
-                      {statusLabel}
-                    </span>
-                  )}
-                </CyberBadge>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-
-        {/* Web Search Toggle */}
-        <button
-          onClick={() => setWebSearch(!webSearch)}
-          className={`
-            hidden lg:flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono font-medium uppercase tracking-wider
-            transition-all duration-150 hover:scale-105 active:scale-95
-            ${webSearch 
-              ? 'bg-primary text-primary-foreground cyber-chamfer-sm shadow-neon' 
-              : 'bg-card text-muted-foreground hover:text-foreground border border-border cyber-chamfer-sm'
-            }
-          `}
-        >
-          <Search size={11} className={isSearching ? "animate-pulse" : ""} />
-          <span>{isSearching ? "Searching..." : "Web"}</span>
+      {/* Right - Actions */}
+      <div className="flex items-center gap-2">
+        {/* Deploy Button */}
+        <button className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 bg-accent text-white text-sm font-medium rounded-md hover:bg-accent/90 transition-colors">
+          <Play size={14} fill="currentColor" />
+          Deploy
         </button>
 
-        {/* Output Format Badge */}
-        <CyberBadge 
-          variant="tertiary" 
-          shape="sharp"
-          className="hidden md:flex gap-1.5"
-        >
-          <div className="w-1 h-1 rounded-full bg-tertiary animate-pulse" />
-          <span className="font-mono text-xs uppercase">{outputFormat}</span>
-        </CyberBadge>
+        <div className="h-5 w-px bg-border mx-1" />
 
-        {/* Theme Toggle */}
-        <div className="w-px h-5 bg-border hidden sm:block" />
-        <ModeToggle />
+        {/* Web Toggle */}
+        <button
+          onClick={() => setWebSearch(!webSearch)}
+          className={cn(
+            "p-2 rounded-md transition-colors",
+            webSearch ? "text-accent bg-accent/10" : "text-muted-foreground hover:text-foreground"
+          )}
+          title="Toggle Web Search"
+        >
+          <Globe size={16} />
+        </button>
+
+        {/* Layout Toggle */}
+        <button className="p-2 text-muted-foreground hover:text-foreground rounded-md transition-colors">
+          <Layout size={16} />
+        </button>
+
+        {/* Settings */}
+        <button className="p-2 text-muted-foreground hover:text-foreground rounded-md transition-colors">
+          <Settings size={16} />
+        </button>
       </div>
     </motion.header>
   );

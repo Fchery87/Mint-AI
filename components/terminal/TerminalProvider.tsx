@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { usePtyClient, PtyMessage } from './usePtyClient';
 
 export interface TerminalSession {
@@ -72,8 +72,11 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   // Track session to PTY ID mapping
   const sessionToPtyMap = useRef<Map<string, string>>(new Map());
 
+  // Extract stable state references
+  const { connected, connecting, error, connect, disconnect } = ptyClient;
+
   const createSession = useCallback((name?: string) => {
-    const id = name || `term_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const id = `term_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const sessionName = name || `Terminal ${sessions.length + 1}`;
     const newSession: TerminalSession = {
       id,
@@ -86,12 +89,12 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     setActiveSessionId(id);
     
     // Create PTY session if connected
-    if (ptyClient.connected) {
+    if (connected) {
       ptyClient.createSession(id, newSession.cwd);
     }
     
     return id;
-  }, [sessions.length, ptyClient]);
+  }, [sessions.length, connected, ptyClient.createSession]);
 
   const closeSession = useCallback((id: string) => {
     if (sessions.length <= 1) {
@@ -101,7 +104,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     
     // Kill PTY session if exists
     const ptyId = sessionToPtyMap.current.get(id);
-    if (ptyId && ptyClient.connected) {
+    if (ptyId && connected) {
       ptyClient.killSession(ptyId);
       sessionToPtyMap.current.delete(id);
     }
@@ -110,7 +113,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     if (activeSessionId === id) {
       setActiveSessionId(sessions[0]?.id || null);
     }
-  }, [sessions, activeSessionId, ptyClient]);
+  }, [sessions, activeSessionId, connected, ptyClient.killSession]);
 
   const renameSession = useCallback((id: string, name: string) => {
     setSessions((prev) =>
@@ -130,33 +133,33 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   // Execute command in PTY session
   const executeCommand = useCallback((sessionId: string, command: string) => {
     const ptyId = sessionToPtyMap.current.get(sessionId);
-    console.log(`📝 executeCommand called: sessionId=${sessionId}, ptyId=${ptyId}, connected=${ptyClient.connected}, command="${command}"`);
+    console.log(`📝 executeCommand called: sessionId=${sessionId}, ptyId=${ptyId}, connected=${connected}, command="${command}"`);
     console.log(`   Session map:`, Array.from(sessionToPtyMap.current.entries()));
-    if (ptyId && ptyClient.connected) {
+    if (ptyId && connected) {
       ptyClient.writeToSession(ptyId, command + '\r');
       console.log(`   ✅ Sent to PTY`);
     } else {
-      console.warn(`❌ Cannot execute: ptyId=${ptyId}, connected=${ptyClient.connected}`);
-      if (!ptyClient.connected) {
+      console.warn(`❌ Cannot execute: ptyId=${ptyId}, connected=${connected}`);
+      if (!connected) {
         console.warn(`   Reason: PTY not connected`);
       } else if (!ptyId) {
         console.warn(`   Reason: No PTY ID mapped for session ${sessionId}`);
       }
     }
-  }, [ptyClient]);
+  }, [connected, ptyClient.writeToSession]);
 
   // Resize terminal
   const resizeTerminal = useCallback((sessionId: string, cols: number, rows: number) => {
     const ptyId = sessionToPtyMap.current.get(sessionId);
-    if (ptyId && ptyClient.connected) {
+    if (ptyId && connected) {
       ptyClient.resizeSession(ptyId, cols, rows);
     }
-  }, [ptyClient]);
+  }, [connected, ptyClient.resizeSession]);
 
   // Kill session and PTY
   const killSession = useCallback((sessionId: string) => {
     const ptyId = sessionToPtyMap.current.get(sessionId);
-    if (ptyId && ptyClient.connected) {
+    if (ptyId && connected) {
       ptyClient.killSession(ptyId);
       sessionToPtyMap.current.delete(sessionId);
     }
@@ -165,9 +168,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     setSessions((prev) =>
       prev.map((s) => (s.id === sessionId ? { ...s, ptyId: null } : s))
     );
-  }, [ptyClient]);
+  }, [connected, ptyClient.killSession]);
 
-  // Handle PTY session created
+  // Handle PTY session created - stable effect
   useEffect(() => {
     const unsubCreated = ptyClient.on('created', (msg: PtyMessage) => {
       console.log(`📨 Received 'created' message:`, msg);
@@ -204,11 +207,12 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       unsubCreated();
       unsubCwd();
     };
-  }, [ptyClient]); // Remove ptyClient.connected from deps to keep handlers stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - handlers are stable via ref
 
   // Auto-create PTY sessions for existing sessions when connected
   useEffect(() => {
-    if (!ptyClient.connected) return;
+    if (!connected) return;
 
     // Create PTY sessions for any sessions that don't have one yet
     const createdIds: string[] = [];
@@ -219,33 +223,52 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         ptyClient.createSession(session.id, session.cwd);
       }
     });
-  }, [ptyClient.connected]);
+  }, [connected]); // Only depend on connected state
+
+  // Memoize context value to prevent unnecessary re-renders
+  const value = useMemo(() => ({
+    sessions,
+    activeSessionId,
+    config,
+    createSession,
+    closeSession,
+    setActiveSession: setActiveSessionId,
+    renameSession,
+    updateConfig,
+    getSession,
+    ptyState: {
+      connected,
+      connecting,
+      error,
+    },
+    ptyClient,
+    connect,
+    disconnect,
+    executeCommand,
+    resizeTerminal,
+    killSession,
+  }), [
+    sessions,
+    activeSessionId,
+    config,
+    createSession,
+    closeSession,
+    renameSession,
+    updateConfig,
+    getSession,
+    connected,
+    connecting,
+    error,
+    ptyClient,
+    connect,
+    disconnect,
+    executeCommand,
+    resizeTerminal,
+    killSession,
+  ]);
 
   return (
-    <TerminalContext.Provider
-      value={{
-        sessions,
-        activeSessionId,
-        config,
-        createSession,
-        closeSession,
-        setActiveSession: setActiveSessionId,
-        renameSession,
-        updateConfig,
-        getSession,
-        ptyState: {
-          connected: ptyClient.connected,
-          connecting: ptyClient.connecting,
-          error: ptyClient.error,
-        },
-        ptyClient,
-        connect: ptyClient.connect,
-        disconnect: ptyClient.disconnect,
-        executeCommand,
-        resizeTerminal,
-        killSession,
-      }}
-    >
+    <TerminalContext.Provider value={value}>
       {children}
     </TerminalContext.Provider>
   );
