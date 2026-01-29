@@ -181,25 +181,14 @@ function ChatPanelComponent({
           Plan
         </button>
         <button
-          onClick={() => {
-            // Only allow switching to build if plan is approved
-            if (canStartBuild || planStatus === 'approved') {
-              onModeChange?.("build");
-            } else {
-              // Could show a toast here, but for now just prevent the switch
-              console.warn('Cannot switch to Build mode: Plan not approved');
-            }
-          }}
-          disabled={!canStartBuild && planStatus !== 'approved'}
+          onClick={() => onModeChange?.("build")}
           className={cn(
             "flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-all",
             mode === "build"
               ? "bg-accent text-white shadow-sm"
-              : !canStartBuild && planStatus !== 'approved'
-              ? "text-muted-foreground/50 cursor-not-allowed"
               : "text-muted-foreground hover:text-foreground hover:bg-muted"
           )}
-          title={!canStartBuild && planStatus !== 'approved' ? "Approve a plan first to enable Build mode" : "Switch to Build mode"}
+          title="Switch to Build mode - generate code directly"
         >
           <Hammer size={14} />
           Build
